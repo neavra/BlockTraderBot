@@ -36,7 +36,7 @@ async def main():
         logger.info("Exchange initialized successfully")
         
         # Order parameters
-        symbol = "BTC/USD"
+        symbol = "BTC/USDC:USDC"
         order_type = "limit"
         side = "buy"
         amount = 0.01    # Order quantity

@@ -20,6 +20,7 @@ class HyperliquidExchange(ExchangeInterface):
             'options': {
                 'defaultType': 'swap',  # For perpetual futures
                 'adjustForTimeDifference': True,
+                'testnet': True,
             }
         })
     
