@@ -1,0 +1,17 @@
+{
+    "exchanges": {
+      "hyperliquid": {
+        "testnet": true,
+        "timeout": 5000,
+        "retry_attempts": 3,
+        "default_leverage": 1
+      }
+    },
+    "execution": {
+    "test_run": true
+    },
+    "logging": {
+      "level": "INFO",
+      "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    }
+  }
