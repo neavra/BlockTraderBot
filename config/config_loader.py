@@ -39,6 +39,10 @@ def load_config():
         'wallet_address': os.getenv('HL_WALLET_ADDRESS', ''),
         'private_key': os.getenv('HL_PRIVATE_KEY', '')
     })
+    config['monitoring']['telegram'].update({
+        'bot_token': os.getenv('BOT_TOKEN', ''),
+        'chat_id': os.getenv('CHAT_ID', '')
+    })
     
     return config
 
