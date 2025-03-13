@@ -1,39 +1,31 @@
 import asyncio
-from connectors.binance.BinanceClient import BinanceWebSocketClient, BinanceRestClient
-from database.db import SessionLocal
+from managers.CandleManager import CandleManager
+from database.db import DBAdapter
 from database.services.candleservice import CandleService
-from dotenv import load_dotenv
-load_dotenv()  # take environment variables from .env.
 
 async def start_ingestion():
     # Initialize DB session
-    db_session = SessionLocal()
+    db_adapter = DBAdapter()
 
     # Initialize services with DB session
-    candle_service = CandleService(db_session)
+    candle_service = CandleService(db_adapter)
 
     # Initialize clients
-    binance_ws = BinanceWebSocketClient("BTCUSDT", "1m", candle_service)
-    binance_rest = BinanceRestClient()
-
-    async def fetch_historical():
-        """Periodically fetch historical candlestick data via REST."""
-        while True:
-            try:
-                data = await binance_rest.fetch_candlestick_data("BTCUSDT", "1m")
-                await candle_service.store_candles(data)  # Use the service to store data
-            except Exception as e:
-                print(f"Error fetching historical data: {e}")
-            await asyncio.sleep(300)
-
-    # Start WebSocket listener and historical fetcher
-    websocket_task = asyncio.create_task(binance_ws.listen())
-    #rest_task = asyncio.create_task(fetch_historical())
+    timeframes = ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"]
+    # Initialize the multi-timeframe manager
+    manager = CandleManager("BTCUSDT", timeframes, candle_service)
+    await manager.initialize_websockets()
+    
+    # Start all listeners and fetchers
+    websocket_tasks = await manager.start_websocket_listeners()
+    #binance_rest = BinanceRestClient()
 
     try:
-        await asyncio.gather(websocket_task)
+        await asyncio.gather(*websocket_tasks)
+    except Exception as e:
+        print(f"Error in main process: {e}")
     finally:
-        db_session.close()  # Ensure DB session is properly closed
+        print("Closing all connections")
 
 if __name__ == "__main__":
     asyncio.run(start_ingestion())
