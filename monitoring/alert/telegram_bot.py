@@ -3,7 +3,7 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler
 
-from data.alert import Alert
+from shared.dto.alert import Alert
 from order_manager import OrderManager
 from position_manager import PositionManager
 

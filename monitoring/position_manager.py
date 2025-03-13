@@ -1,5 +1,5 @@
 from typing import List, Dict, Any, Optional
-from data.position import Position
+from shared.dto.position import Position
 
 class PositionManager:
     """Placeholder for position management functionality"""

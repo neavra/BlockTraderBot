@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 from alert.telegram_bot import TelegramBot
-from data.alert import Alert, AlertType
+from shared.dto.alert import Alert, AlertType
 
 # Set up logging
 logging.basicConfig(

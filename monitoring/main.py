@@ -8,7 +8,7 @@ import time
 from datetime import datetime
 
 from alert.telegram_bot import TelegramBot
-from data.alert import AlertType
+from shared.dto.alert import AlertType
 from monitoring_service import MonitoringService
 
 # Set up logging
