@@ -1,67 +1,70 @@
 import asyncio
-from typing import List, Dict
-from connectors.binance.BinanceClient import BinanceWebSocketClient, BinanceRestClient
+from typing import List, Dict, Type
+from managers.HistoricalCandleManager import HistoricalCandleManager
 from database.services.candleservice import CandleService
+from managers.CustomTFCandleManager import CustomTFCandleManager
+from managers.LiveCandleManager import LiveCandleManager
 
-"""To manage the multiple timeframe websockets from the exchange"""
+"""Coordinates all candlestick operations and provides a unified interface."""
 class CandleManager:
-    def __init__(self, symbol: str, timeframes: List[str], candle_service: CandleService):
-        self.symbol = symbol
-        self.timeframes = timeframes
+    def __init__(self, 
+                 candle_service : CandleService, 
+                 rest_client : Type, 
+                 websocket_client: Type, 
+                 symbol : str, 
+                 exchange : str, 
+                 base_timeframes : List[str], 
+                 custom_timeframes: List[str] = None):
+        # Candle db service
         self.candle_service = candle_service
-        self.websocket_clients: Dict[str, BinanceWebSocketClient] = {}
+
+        # Intialise all managers
+        self.historical_manager = HistoricalCandleManager(
+            candle_service=self.candle_service, 
+            rest_client=rest_client, 
+            symbol=symbol, 
+            exchange=exchange, 
+            timeframes=base_timeframes)
         
-    async def initialize_websockets(self):
-        """Initialize websocket connections for each timeframe"""
-        for timeframe in self.timeframes:
-            self.websocket_clients[timeframe] = BinanceWebSocketClient(
-                self.symbol, timeframe, self.candle_service
+        self.live_manager = LiveCandleManager(
+            symbol=symbol, 
+            timeframes=base_timeframes, 
+            candle_service=candle_service, 
+            websocket_client_class=websocket_client
             )
-    
-    async def start_websocket_listeners(self):
-        """Start all websocket listeners"""
-        tasks = set()
-        for timeframe, client in self.websocket_clients.items():
-            tasks.add(asyncio.create_task(client.listen()))
-        return tasks
-    
-    async def fetch_historical_for_timeframe(self, timeframe: str):
-        """Fetch historical data for a specific timeframe"""
-        while True:
-            try:
-                self.rest_client = BinanceRestClient(self.symbol, timeframe, self.candle_service)
-                data = await self.rest_client.fetch_candlestick_data(self.symbol, timeframe, self.candle_service)
-                await self.candle_service.add_candles(data)
-                
-                # Adjust sleep time based on timeframe to reduce unnecessary API calls
-                sleep_time = self._calculate_sleep_time(timeframe)
-                await asyncio.sleep(sleep_time)
-            except Exception as e:
-                print(f"Error fetching historical data for {timeframe}: {e}")
-                await asyncio.sleep(60)  # Wait a minute before retrying
-    
-    def _calculate_sleep_time(self, timeframe: str) -> int:
-        """Calculate appropriate sleep time based on timeframe"""
-        # Parse the timeframe string (e.g., "1m", "4h", "1d")
-        unit = timeframe[-1]
-        value = int(timeframe[:-1])
         
-        if unit == "s":
-            return value * 5  # 5x the seconds timeframe
-        elif unit == "m":
-            return value * 60  # Convert minutes to seconds and multiply
-        elif unit == "h":
-            return value * 60 * 60  # Convert hours to seconds
-        elif unit == "d":
-            return value * 24 * 60 * 60  # Convert days to seconds
-        elif unit == "w":
-            return value * 7 * 24 * 60 * 60  # Convert weeks to seconds
-        else:  # "M" for month, approximate
-            return 30 * 24 * 60 * 60  # Roughly a month
+        if custom_timeframes:
+            self.timeframe_calculator = CustomTFCandleManager(
+                candle_service=self.candle_service, 
+                symbol=symbol, 
+                exchange=exchange, 
+                base_timeframes=base_timeframes, 
+                custom_timeframes=custom_timeframes)
+        else:
+            self.timeframe_calculator = None
     
-    async def start_historical_fetchers(self):
-        """Start historical data fetchers for all timeframes"""
-        tasks = []
-        for timeframe in self.timeframes:
-            tasks.append(asyncio.create_task(self.fetch_historical_for_timeframe(timeframe)))
-        return tasks
+    # Main interface methods
+    async def start(self, lookback_days=10): 
+        # Start historical data population and maintenance
+        await self.historical_manager.populate_historical_data(lookback_days)
+        asyncio.create_task(self.historical_manager.run_maintenance())
+        
+        # Calculate initial custom timeframes if configured
+        if self.timeframe_calculator:
+            await self.timeframe_calculator.calculate_custom_timeframes()
+    
+    async def process_real_time_candle(self):
+        # Process live candle update for standard TFs
+        await self.live_manager.initialize_websockets()
+        self.websocket_tasks = await self.live_manager.start_websocket_listeners()
+        return self.websocket_tasks
+        
+    
+    # Convenience methods that unify access to both base and custom timeframes
+    async def get_candles(self, timeframe, limit=100):
+        if timeframe in self.live_manager.timeframes:
+            return self.repository.get_candles(self.live_manager.symbol, self.live_manager.exchange, timeframe, limit=limit)
+        elif self.timeframe_calculator and timeframe in self.timeframe_calculator.custom_timeframes:
+            return await self.timeframe_calculator.get_custom_timeframe_candles(timeframe, limit)
+        else:
+            raise ValueError(f"Unknown timeframe: {timeframe}")

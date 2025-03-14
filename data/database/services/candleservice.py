@@ -1,6 +1,7 @@
 import logging
 import time
 from datetime import datetime
+from connectors.types import CandleSchema
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from ..models.candlestick import Candlestick 
@@ -74,23 +75,23 @@ class CandleService:
                 self.logger.error(f"{Fore.RED}✗ Error adding candle{Style.RESET_ALL}: {candle_info} - {str(e)}")
                 return None
             
-    def add_candles(self, candles_data: List[dict]) -> None:
+    def add_candles(self, candles_data: List[CandleSchema]) -> None:
         """Add multiple candles to the database efficiently."""
         if not candles_data:
             self.logger.warning(f"{Fore.YELLOW}⚠ No candles to add{Style.RESET_ALL}")
             return
             
         start_time = time.time()
-        sample_candle = candles_data[0] if candles_data else {}
-        symbol = sample_candle.get("symbol", "unknown")
-        exchange = sample_candle.get("exchange", "unknown")
-        timeframe = sample_candle.get("timeframe", "unknown")
+        sample_candle = candles_data[0]
+        symbol = sample_candle.symbol
+        exchange = sample_candle.exchange
+        timeframe = sample_candle.timeframe
         
         self.logger.debug(f"Bulk adding {len(candles_data)} candles for {symbol}/{exchange}/{timeframe}")
         
         with self.db_adapter.get_db() as session:
             try:
-                candles = [Candlestick(**data) for data in candles_data]
+                candles = [Candlestick(**data.dict()) for data in candles_data]
                 session.bulk_save_objects(candles)  # Bulk insert
                 session.commit()
                 
@@ -167,6 +168,53 @@ class CandleService:
                     f"{symbol}/{exchange}/{timeframe} - {str(e)}"
                 )
                 return []
+    def get_latest_candle(self, symbol: str, exchange: str, timeframe: str) -> Optional[Dict]:
+        """
+        Get the most recent candle for a timeframe.
+        
+        Args:
+            timeframe: Timeframe to check
+            
+        Returns:
+            Dict or None: Latest candle data or None if no candles exist
+        """
+        candles = self.get_candles(
+            symbol, exchange, timeframe, limit=1
+        )
+        
+        if candles and len(candles) > 0:
+            # Convert to dict if it's an ORM object
+            if hasattr(candles[0], '__dict__'):
+                return {k: v for k, v in candles[0].__dict__.items() if not k.startswith('_')}
+            return candles[0]
+        return None
+    
+    def get_earliest_candle(self, symbol: str, exchange: str, timeframe: str) -> Optional[Dict]:
+        """
+        Get the earliest candle for a timeframe.
+        
+        Args:
+            timeframe: Timeframe to check
+            
+        Returns:
+            Dict or None: Earliest candle data or None if no candles exist
+        """
+        with self.db_adapter.get_db() as session:
+            try:
+                # Query the earliest candle by ordering by timestamp ascending
+                earliest = session.query(Candlestick).filter_by(
+                    symbol=symbol, exchange=exchange, timeframe=timeframe
+                ).order_by(Candlestick.timestamp.asc()).first()
+                
+                if earliest:
+                    # Convert to dict if it's an ORM object
+                    if hasattr(earliest, '__dict__'):
+                        return {k: v for k, v in earliest.__dict__.items() if not k.startswith('_')}
+                    return earliest
+                return None
+            except Exception as e:
+                self.logger.error(f"{Fore.RED}Error getting earliest candle: {e}{Style.RESET_ALL}")
+                return None
 
     def update_candle(self, candle_data: dict) -> Optional[Candlestick]:
         """Update an existing candle."""
