@@ -117,15 +117,25 @@ class BinanceRestClient(MarketDataClient):
             endTime: Optional[int] = None
             ) -> List[CandleSchema]:
         url = self._build_url(limit=limit, startTime=startTime, endTime=endTime)
-
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, ssl=self.ssl_context) as response:
-                data = await response.json()
-                return [
-                    CandleSchema(
-                        symbol=self.symbol, exchange=self.exchange, timeframe=self.interval,
-                        timestamp=c[6], open=float(c[1]), high=float(c[2]),
-                        low=float(c[3]), close=float(c[4]), volume=float(c[5])
-                    )
-                    for c in data
-                ]
+        try:
+            # Validate timestamps
+            if startTime is not None and not isinstance(startTime, int):
+                raise ValueError(f"Invalid startTime: {startTime} (should be an integer)")
+            if endTime is not None and not isinstance(endTime, int):
+                raise ValueError(f"Invalid endTime: {endTime} (should be an integer)")
+            #print(url)
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, ssl=self.ssl_context) as response:
+                    data = await response.json()
+                    #print(data)
+                    return [
+                        CandleSchema(
+                            symbol=self.symbol, exchange=self.exchange, timeframe=self.interval,
+                            timestamp=c[6], open=float(c[1]), high=float(c[2]),
+                            low=float(c[3]), close=float(c[4]), volume=float(c[5])
+                        )
+                        for c in data if isinstance(c, list) and len(c) >= 7
+                    ]
+        except Exception as e:
+            print(f"Error fetching candlestick data: {e}")
+            return []

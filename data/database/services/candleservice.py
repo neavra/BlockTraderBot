@@ -83,6 +83,7 @@ class CandleService:
             
         start_time = time.time()
         sample_candle = candles_data[0]
+        #print(sample_candle)
         symbol = sample_candle.symbol
         exchange = sample_candle.exchange
         timeframe = sample_candle.timeframe
@@ -101,11 +102,21 @@ class CandleService:
                     f"{symbol}/{exchange}/{timeframe} ({elapsed:.2f}ms, {elapsed/len(candles_data):.2f}ms per candle)"
                 )
             except IntegrityError:
-                session.rollback()
                 self.logger.warning(
-                    f"{Fore.YELLOW}⚠ Duplicate entries detected in bulk add{Style.RESET_ALL}: "
-                    f"{symbol}/{exchange}/{timeframe} - transaction rolled back"
-                )
+                            f"{Fore.YELLOW}⚠ Duplicate entries detected in bulk add{Style.RESET_ALL}: "
+                            f"{symbol}/{exchange}/{timeframe} - Rolling back and Adding candles manually..."
+                        )
+                session.rollback()
+                for candle in candles:
+                    try:
+                        session.add(candle)  # Try adding one by one
+                        session.commit()
+                    except IntegrityError:
+                        session.rollback()  # Rollback only the failing object
+                        self.logger.warning(
+                            f"{Fore.YELLOW}⚠ Duplicate candle detected{Style.RESET_ALL}: "
+                            f"{symbol}/{exchange}/{timeframe}/{candle.timestamp} - transaction rolled back"
+                        )
             except SQLAlchemyError as e:
                 session.rollback()
                 self.logger.error(
@@ -277,3 +288,105 @@ class CandleService:
                 session.rollback()
                 self.logger.error(f"{Fore.RED}✗ Error deleting candle{Style.RESET_ALL}: {candle_info} - {str(e)}")
                 return False
+    
+    def check_for_gaps(self, symbol: str, exchange: str, timeframe: str, max_gaps: int = 100) -> List[tuple]:
+        """
+        Check for gaps in candle data for a specific symbol, exchange, and timeframe.
+        
+        Args:
+            symbol: Trading symbol (e.g., 'BTCUSDT').
+            exchange: Exchange name (e.g., 'Binance').
+            timeframe: Timeframe to check (e.g., '1m', '1h').
+            max_gaps: Maximum number of gaps to return.
+            
+        Returns:
+            List of tuples (gap_start_timestamp, gap_end_timestamp) where each tuple represents a gap.
+        """
+        start_time = time.time()
+        self.logger.debug(f"Checking for gaps in {symbol}/{exchange}/{timeframe}")
+        
+        with self.db_adapter.get_db() as session:
+            try:
+                # Get all candles for the symbol/exchange/timeframe, ordered by timestamp
+                candles = (
+                    session.query(Candlestick)
+                    .filter_by(symbol=symbol, exchange=exchange, timeframe=timeframe)
+                    .order_by(Candlestick.timestamp.asc())
+                    .all()
+                )
+                
+                if not candles or len(candles) < 2:
+                    self.logger.info(
+                        f"{Fore.YELLOW}⚠ Not enough candles to check for gaps{Style.RESET_ALL}: "
+                        f"{symbol}/{exchange}/{timeframe}"
+                    )
+                    return []
+                
+                # Calculate the expected time interval between candles based on timeframe
+                interval_ms = self._get_timeframe_ms(timeframe)
+                
+                # Find gaps
+                gaps = []
+                for i in range(1, len(candles)):
+                    current_timestamp = candles[i].timestamp
+                    previous_timestamp = candles[i-1].timestamp
+                    
+                    # Calculate expected next timestamp
+                    expected_timestamp = previous_timestamp + interval_ms
+                    
+                    # If there's a gap larger than the expected interval
+                    if (current_timestamp - expected_timestamp) >= interval_ms:
+                        # Gap detected
+                        gap_start = expected_timestamp
+                        gap_end = current_timestamp - interval_ms
+                        gaps.append((gap_start, gap_end))
+                        
+                        self.logger.debug(
+                            f"{Fore.YELLOW}⚠ Gap detected{Style.RESET_ALL}: "
+                            f"{symbol}/{exchange}/{timeframe} from "
+                            f"{datetime.fromtimestamp(gap_start/1000).strftime('%Y-%m-%d %H:%M:%S')} to "
+                            f"{datetime.fromtimestamp(gap_end/1000).strftime('%Y-%m-%d %H:%M:%S')}"
+                        )
+                        
+                        # Limit the number of gaps to return
+                        if len(gaps) >= max_gaps:
+                            break
+                
+                elapsed = (time.time() - start_time) * 1000
+                self.logger.info(
+                    f"{Fore.BLUE}⚡ Found {len(gaps)} gaps{Style.RESET_ALL}: "
+                    f"{symbol}/{exchange}/{timeframe} ({elapsed:.2f}ms)"
+                )
+                return gaps
+                
+            except SQLAlchemyError as e:
+                self.logger.error(
+                    f"{Fore.RED}✗ Error checking for gaps{Style.RESET_ALL}: "
+                    f"{symbol}/{exchange}/{timeframe} - {str(e)}"
+                )
+                return []
+        
+    def _get_timeframe_ms(self, timeframe: str) -> int:
+        """
+        Converts a timeframe string to milliseconds.
+        
+        Examples:
+            "1m" -> 60000
+            "1h" -> 3600000
+        """
+        unit = timeframe[-1].lower()
+        value = int(timeframe[:-1])
+        
+        if unit == 'm':
+            return value * 60 * 1000
+        elif unit == 'h':
+            return value * 60 * 60 * 1000
+        elif unit == 'd':
+            return value * 24 * 60 * 60 * 1000
+        elif unit == 'w':
+            return value * 7 * 24 * 60 * 60 * 1000
+        elif unit == 'M':  # Month (approximated)
+            return value * 30 * 24 * 60 * 60 * 1000
+        else:
+            self.logger.error(f"{Fore.RED}Unsupported timeframe unit: {unit}{Style.RESET_ALL}")
+            raise ValueError(f"Unsupported timeframe unit: {unit}")
