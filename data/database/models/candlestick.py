@@ -1,3 +1,4 @@
+from datetime import datetime
 from sqlalchemy import Column, Integer, Float, String, DECIMAL, TIMESTAMP, UniqueConstraint, Index
 from ..base import Base
 
@@ -8,7 +9,7 @@ class Candlestick(Base):
     symbol = Column(String(20), nullable=False)
     exchange = Column(String(20), nullable=False)
     timeframe = Column(String(5), nullable=False)
-    timestamp = Column(TIMESTAMP, nullable=False)
+    timestamp = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False)
     open = Column(DECIMAL(20, 8), nullable=False)
     high = Column(DECIMAL(20, 8), nullable=False)
     low = Column(DECIMAL(20, 8), nullable=False)

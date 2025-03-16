@@ -1,7 +1,13 @@
 from .types import CandleSchema
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Tuple
+
+# Convert naive datetime to aware datetime
+def make_aware(dt):
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 def parse_binance_kline(data: dict, exchange: str = "Binance") -> Tuple[CandleSchema, bool]:
     """

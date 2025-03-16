@@ -44,10 +44,11 @@ class CandleManager:
             self.timeframe_calculator = None
     
     # Main interface methods
-    async def start(self, lookback_days=10): 
+    async def start(self, lookback_days=30): 
         # Start historical data population and maintenance
         await self.historical_manager.populate_historical_data(lookback_days)
-        asyncio.create_task(self.historical_manager.run_maintenance())
+        asyncio.create_task(self.historical_manager.run_maintenance(lookback_days=lookback_days))
+       
         
         # Calculate initial custom timeframes if configured
         if self.timeframe_calculator:

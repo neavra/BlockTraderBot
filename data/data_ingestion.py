@@ -14,8 +14,8 @@ async def start_ingestion():
 
     # Initialize clients
     symbols = ["BTCUSDT", "ETHUSDT"]
-    #timeframes = ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"]
-    timeframes = ["1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"]
+    timeframes = ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"]
+    #timeframes = ["1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"]
     exchange = "binance"
     manager_list : List[CandleManager] = []
     # Initialize the multi-timeframe managers
@@ -32,7 +32,7 @@ async def start_ingestion():
 
     # Start historical data population for all managers
     for manager in manager_list:
-       await manager.start(lookback_days=60)
+       await manager.start(lookback_days=30)
     
     # Start and collect all websocket tasks from all managers
     all_websocket_tasks = set()

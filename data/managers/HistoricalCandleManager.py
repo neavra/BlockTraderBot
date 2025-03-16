@@ -111,7 +111,7 @@ class HistoricalCandleManager:
     async def populate_historical_data(
         self, 
         lookback_days: int = 30, 
-        batch_size: int = 1000000000, 
+        batch_size: int = 1500, 
     ) -> Dict[str, int]:
         """
         Fetches historical data for all configured timeframes.
@@ -129,7 +129,7 @@ class HistoricalCandleManager:
         for timeframe in self.timeframes:
             candle_count = await self._populate_timeframe(timeframe, lookback_days, batch_size)
             results[timeframe] = candle_count
-            
+        self.logger.info(f"Population complete!")
         return results
     
     async def _populate_timeframe(
@@ -152,42 +152,58 @@ class HistoricalCandleManager:
             
         try:
             self._ongoing_operations.add(op_key)
-            
-            # Get the earliest and latest timestamps in the database
-            latest_candle = self.candle_service.get_latest_candle(self.symbol, self.exchange, timeframe)
-            earliest_candle = self.candle_service.get_earliest_candle(self.symbol, self.exchange, timeframe)
-            
             #print(latest_candle)
+            # Get range of candles to populate for:
             end_time = datetime.now(timezone.utc)
             start_time = end_time - timedelta(days=lookback_days)
             
             loaded_candles = 0
-            
-            # If we have data, adjust our fetch windows
-            if latest_candle:
-                # Convert timestamp to datetime
-                latest_time = datetime.fromtimestamp(latest_candle["timestamp"].timestamp(), tz=timezone.utc)
+            forwardFilled = False
+            backFilled = False
+
+            while not forwardFilled:
+                # Get the latest timestamps in the database
+                latest_candle = await self.candle_service.get_latest_candle(self.symbol, self.exchange, timeframe)
+
+                # If we have data, adjust our fetch windows
+                if latest_candle:
+                    
+                    # Convert timestamp to datetime
+                    latest_time = datetime.fromtimestamp(latest_candle["timestamp"].timestamp(), tz=timezone.utc)
                 
-                # If latest candle is recent enough, no need fetch forward
-                if (end_time - latest_time).total_seconds() * 1000 > self._get_timeframe_ms(timeframe):  # Less than 1 hour old
-                
-                    # Only fetch forward from latest candle
-                    self.logger.info(f"Data not recent enough found for {timeframe}, fetching forward data")
-                    loaded_forward = await self._fetch_forward(timeframe, int(latest_time.timestamp() * 1000 + 1), batch_size)
-                    loaded_candles += loaded_forward
-                
+                    # If latest candle is recent enough, no need fetch forward, means it is fully populated:
+                    if (end_time - latest_time).total_seconds() * 1000 > self._get_timeframe_ms(timeframe):  # More than TF means candle havent close
+                    
+                        # Only fetch forward from latest candle
+                        self.logger.info(f"Data not recent enough found for {timeframe}, fetching forward data")
+                        loaded_forward = await self._fetch_forward(timeframe, int(latest_time.timestamp() * 1000 + 1), batch_size)
+                        loaded_candles += loaded_forward
+                    else:
+                        self.logger.info(f"Completed fetching forward data for {timeframe}")
+                        forwardFilled = True
+                else:
+                    # Means no data existing --> fetch whole range:
+                    break
+
+            while not backFilled:
+                # Get the earliest timestamps in the database
+                earliest_candle = await self.candle_service.get_earliest_candle(self.symbol, self.exchange, timeframe)
                 # Check if we have enough historical data
                 if earliest_candle:
                     earliest_time = datetime.fromtimestamp(earliest_candle["timestamp"].timestamp(), tz=timezone.utc)
-                    if earliest_time <= start_time:
+                    if earliest_time <= start_time or (start_time - earliest_time).total_seconds() * 1000 < self._get_timeframe_ms(timeframe):
                         self.logger.info(f"Historical data for {timeframe} is complete")
+                        backFilled = True
                         return loaded_candles
-                
-                    # Fetch backward to cover the lookback period
-                    loaded_backward = await self._fetch_backward(timeframe, int(start_time.timestamp() * 1000), 
-                                                                int(earliest_time.timestamp() * 1000 - 1) if earliest_candle else None, batch_size)
-                    loaded_candles += loaded_backward
-                    return loaded_candles
+                    else:
+                        # Fetch backward to cover the lookback period
+                        self.logger.info(f"Historical backfilled candles not enough found for {timeframe}, fetching backfill data")
+                        loaded_backward = await self._fetch_backward(timeframe, int(start_time.timestamp() * 1000), 
+                                                                    int(earliest_time.timestamp() * 1000 - 1) if earliest_candle else None, batch_size)
+                        loaded_candles += loaded_backward
+                else:
+                    break
+
         
             # If we have no data or it's too old, fetch the entire range
             self.logger.info(f"No recent data for {timeframe}, fetching entire range")
@@ -253,7 +269,7 @@ class HistoricalCandleManager:
                             
                         
                         # Store in candle_service
-                        self.candle_service.add_candles(candles)
+                        await self.candle_service.add_candles(candles)
 
                         # Update for next iteration
                         oldest_candle_time : datetime = min(c.timestamp for c in candles)
@@ -314,6 +330,7 @@ class HistoricalCandleManager:
 
             # Check whether last candle has closed, if no we don't store it:
             last_candle = candles[-1]
+            print(last_candle.timestamp.tzinfo)
             if last_candle.timestamp > datetime.now(timezone.utc):
                 del candles[-1]
             
@@ -322,7 +339,7 @@ class HistoricalCandleManager:
                 return 0
                 
             # Store the candles
-            self.candle_service.add_candles(candles)
+            await self.candle_service.add_candles(candles)
             
             return len(candles)
             
@@ -377,7 +394,7 @@ class HistoricalCandleManager:
             self._ongoing_operations.add(op_key)
             
             # Get gaps from candle_service ##TODO - Need to add this method:
-            gaps = self.candle_service.check_for_gaps(self.symbol, self.exchange, timeframe, max_gaps_to_fill)
+            gaps = await self.candle_service.check_for_gaps(self.symbol, self.exchange, timeframe, max_gaps_to_fill)
             
             if not gaps:
                 self.logger.debug(f"No gaps found for {timeframe}")
@@ -433,6 +450,7 @@ class HistoricalCandleManager:
     async def run_maintenance(
         self, 
         interval: int = 3600,
+        lookback_days: int = 30,
         gap_check_interval: int = 7200,  # Check for gaps once per 2 hours
         auto_restart: bool = True
     ) -> None:
@@ -441,6 +459,7 @@ class HistoricalCandleManager:
         
         Args:
             interval: Seconds between update checks
+            lookback_days: Number of days to look back for historical data
             gap_check_interval: Seconds between gap checks
             auto_restart: Whether to auto-restart the task if it fails
         """
@@ -456,19 +475,20 @@ class HistoricalCandleManager:
                 
                 for timeframe in self.timeframes:
                     # Update recent data
-                    self.logger.debug(f"Running maintenance update for {timeframe}")
-                    latest_candle = self.candle_service.get_latest_candle(
+                    self.logger.info(f"Running maintenance update for {timeframe}")
+                    await self._populate_timeframe(timeframe, lookback_days=lookback_days, batch_size=1500)
+                    """latest_candle = self.candle_service.get_latest_candle(
                         timeframe=timeframe,
                         symbol=self.symbol,
                         exchange=self.exchange
                         )
                     
                     if latest_candle:
-                        await self._fetch_forward(timeframe=timeframe, latest_timestamp=latest_candle["timestamp"].timestamp(), batch_size=1000000000)
+                        await self._fetch_forward(timeframe=timeframe, latest_timestamp=latest_candle["timestamp"].timestamp(), batch_size=1500)
                     else:
                         # If no data exists, populate with default lookback
                         self.logger.warning(f"No data found for {timeframe} during maintenance, populating with default lookback")
-                        await self._populate_timeframe(timeframe, lookback_days=30, batch_size=1000000000)
+                        await self._populate_timeframe(timeframe, lookback_days=30, batch_size=1500)"""
                     
                     # Check for gaps if needed
                     if run_gap_check:
@@ -495,9 +515,13 @@ class HistoricalCandleManager:
                 else:
                     raise
     
-    def start_maintenance(self, interval: int = 3600) -> asyncio.Task:
+    def start_maintenance(self, lookback_days: int = 30, interval: int = 3600) -> asyncio.Task:
         """
         Starts the maintenance task in the background.
+
+        Args:
+            lookback_days: Number of days to look back for historical data
+            interval: Seconds between update checks
         
         Returns:
             asyncio.Task: The maintenance task
@@ -506,7 +530,7 @@ class HistoricalCandleManager:
             self.logger.warning("Maintenance task already running")
             return self._maintenance_task
             
-        self._maintenance_task = asyncio.create_task(self.run_maintenance(interval))
+        self._maintenance_task = asyncio.create_task(self.run_maintenance(interval, lookback_days))
         return self._maintenance_task
     
     def stop_maintenance(self) -> None:
@@ -525,7 +549,7 @@ class HistoricalCandleManager:
             "1m" -> 60000
             "1h" -> 3600000
         """
-        unit = timeframe[-1].lower()
+        unit = timeframe[-1]
         value = int(timeframe[:-1])
         
         if unit == 'm':
@@ -536,9 +560,71 @@ class HistoricalCandleManager:
             return value * 24 * 60 * 60 * 1000
         elif unit == 'w':
             return value * 7 * 24 * 60 * 60 * 1000
+        elif unit == 'M':
+            return value * 4 * 7 * 24 * 60 * 60 * 1000
         else:
             raise ValueError(f"Unsupported timeframe unit: {unit}")
         
+    async def fill_to_current_date(self, timeframe: str, max_requests: int = 10) -> int:
+        """
+        Fills candlestick data from the latest available candle to the current date.
+        
+        Args:
+            timeframe: Timeframe to fill
+            max_requests: Maximum number of API requests to make (safety limit)
+            
+        Returns:
+            Number of candles loaded
+        """
+        # Get the latest candle
+        latest_candle = await self.candle_service.get_latest_candle(symbol=self.symbol, exchange=self.exchange, timeframe=timeframe)
+        
+        if not latest_candle:
+            self.logger.warning(f"No existing data for {timeframe}, cannot fill forward")
+            return 0
+        
+        # Calculate current timestamp
+        current_ms = int(datetime.now().timestamp() * 1000)
+        
+        # Don't fill if we already have data up to the current time
+        # Allow for a small gap (one candle period) to account for incomplete candles
+        candle_period_ms = self._get_timeframe_ms(timeframe)
+        if latest_candle.close_time >= current_ms - candle_period_ms:
+            self.logger.info(f"Data for {timeframe} is already up to date")
+            return 0
+        
+        # Fill forward in batches
+        total_candles = 0
+        current_start = latest_candle.close_time + 1
+        request_count = 0
+        
+        while current_start < current_ms and request_count < max_requests:
+            # Apply rate limiting
+            await self._check_rate_limit()
+            
+            # Fetch the next batch
+            loaded_candles = await self._fetch_forward(timeframe, current_start, batch_size=1500)
+            
+            if loaded_candles == 0:
+                # No more candles available
+                break
+            
+            total_candles += loaded_candles
+            request_count += 1
+            
+            # Update the starting point for the next batch
+            # We need to get the latest candle again since _fetch_forward has updated the DB
+            latest_candle = await self.repository.get_latest_candle(self.symbol, self.exchange, timeframe)
+            if not latest_candle:
+                break
+            
+            current_start = latest_candle.close_time + 1
+        
+        if request_count >= max_requests:
+            self.logger.warning(f"Reached maximum number of requests ({max_requests}) for {timeframe}")
+        
+        self.logger.info(f"Filled {total_candles} candles for {timeframe} up to current date")
+        return total_candles
 
     async def validate_data_integrity(self, timeframe: str, start_time: int, end_time: int) -> Dict:
         """
@@ -675,7 +761,7 @@ class HistoricalCandleManager:
             return 0
             
         # Backfill in batches
-        return await self._fetch_backward(timeframe, earliest_candle.open_time, target_ms, batch_size=1000000000)
+        return await self._fetch_backward(timeframe, earliest_candle.open_time, target_ms, batch_size=1500)
     
     async def synchronize_timeframes(self, base_timeframe: str, target_timeframes: List[str]) -> Dict[str, int]:
         """
@@ -714,7 +800,7 @@ class HistoricalCandleManager:
                 end_time = earliest_target.open_time - 1 if earliest_target else latest_base.open_time
                 
                 self.logger.info(f"Backfilling {timeframe} from {start_time} to {end_time}")
-                candles_loaded += await self._fetch_range(timeframe, start_time, end_time, batch_size=1000000000)
+                candles_loaded += await self._fetch_range(timeframe, start_time, end_time, batch_size=1500)
             
             # Forward fill if needed
             if not latest_target or latest_target.close_time < latest_base.close_time:
@@ -722,7 +808,7 @@ class HistoricalCandleManager:
                 end_time = latest_base.close_time
                 
                 self.logger.info(f"Forward filling {timeframe} from {start_time} to {end_time}")
-                candles_loaded += await self._fetch_range(timeframe, start_time, end_time, batch_size=1000000000)
+                candles_loaded += await self._fetch_range(timeframe, start_time, end_time, batch_size=1500)
                 
             results[timeframe] = candles_loaded
             

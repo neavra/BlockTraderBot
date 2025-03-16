@@ -1,6 +1,7 @@
+from datetime import datetime, timezone
 from ..marketdataclient import MarketDataClient
 from ..types import CandleSchema
-from ..normalizer import parse_binance_kline
+from ..normalizer import make_aware, parse_binance_kline
 from database.services.candleservice import CandleService
 from typing import Dict, Any, List, Optional, Tuple
 import websockets
@@ -58,14 +59,19 @@ class BinanceWebSocketClient(MarketDataClient):
                 self.logger.info(f"Closed candle: {candle.timestamp}, Open: {candle.open}, Close: {candle.close}")
                 
                 # Check if candle exists in DB before adding
-                existing_candle = self.candleSvc.get_candle(
+                existing_candle = await self.candleSvc.get_candle(
                     symbol=candle.symbol, exchange=candle.exchange, timeframe=candle.timeframe, timestamp=candle.timestamp
                 )
+                candle_object : CandleSchema = CandleSchema(
+                            symbol=candle.symbol, exchange=candle.exchange, timeframe=candle.timeframe,
+                            timestamp=candle.timestamp, open=candle.open, high=candle.high,
+                            low=candle.low, close=candle.close, volume=candle.volume
+                        )
                 
                 if existing_candle:
-                    self.candleSvc.update_candle(candle.dict())
+                    await self.candleSvc.update_candle(candle_object)
                 else:
-                    self.candleSvc.add_candle(candle.dict())
+                    await self.candleSvc.add_candles([candle_object])
                 
                 # Remove from tracking
                 if candle.timeframe in self.open_candles:
@@ -112,7 +118,7 @@ class BinanceRestClient(MarketDataClient):
 
     async def fetch_candlestick_data(
             self,
-            limit: Optional[int] = None,
+            limit: Optional[int] = None, #default is 500, max is 1500
             startTime: Optional[int] = None,
             endTime: Optional[int] = None
             ) -> List[CandleSchema]:
@@ -131,7 +137,7 @@ class BinanceRestClient(MarketDataClient):
                     return [
                         CandleSchema(
                             symbol=self.symbol, exchange=self.exchange, timeframe=self.interval,
-                            timestamp=c[6], open=float(c[1]), high=float(c[2]),
+                            timestamp=datetime.fromtimestamp(c[6]/1000, tz=timezone.utc), open=float(c[1]), high=float(c[2]),
                             low=float(c[3]), close=float(c[4]), volume=float(c[5])
                         )
                         for c in data if isinstance(c, list) and len(c) >= 7
