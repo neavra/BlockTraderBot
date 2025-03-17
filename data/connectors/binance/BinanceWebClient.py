@@ -56,14 +56,14 @@ class BinanceWebSocketClient(MarketDataClient):
             # Closed flag from binance
             if is_candle_closed:
                 # Candle is closed - write it to DB and remove from tracking
-                self.logger.info(f"Closed candle: {candle.timestamp}, Open: {candle.open}, Close: {candle.close}")
+                self.logger.info(f"Closed candle: {candle.timestamp}, Symbol: {candle.symbol}, Timeframe: {candle.timeframe}, Open: {candle.open}, Close: {candle.close}")
                 
                 # Check if candle exists in DB before adding
                 existing_candle = await self.candleSvc.get_candle(
                     symbol=candle.symbol, exchange=candle.exchange, timeframe=candle.timeframe, timestamp=candle.timestamp
                 )
                 candle_object : CandleSchema = CandleSchema(
-                            symbol=candle.symbol, exchange=candle.exchange, timeframe=candle.timeframe,
+                            symbol=candle.symbol, exchange=candle.exchange.lower(), timeframe=candle.timeframe,
                             timestamp=candle.timestamp, open=candle.open, high=candle.high,
                             low=candle.low, close=candle.close, volume=candle.volume
                         )
