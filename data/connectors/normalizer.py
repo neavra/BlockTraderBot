@@ -20,7 +20,7 @@ def parse_binance_kline(data: dict, exchange: str = "Binance") -> Tuple[CandleSc
         symbol=data["s"],
         exchange=exchange,
         timeframe=kline["i"],
-        timestamp=datetime.utcfromtimestamp(kline["T"] / 1000),  # Convert ms to seconds
+        timestamp=datetime.fromtimestamp(kline["T"] / 1000, tz=timezone.utc),  # Convert ms to seconds
         open=Decimal(kline["o"]),
         high=Decimal(kline["h"]),
         low=Decimal(kline["l"]),

@@ -67,11 +67,10 @@ class BinanceWebSocketClient(MarketDataClient):
                             timestamp=candle.timestamp, open=candle.open, high=candle.high,
                             low=candle.low, close=candle.close, volume=candle.volume
                         )
-                
                 if existing_candle:
                     await self.candleSvc.update_candle(candle_object)
                 else:
-                    await self.candleSvc.add_candles([candle_object])
+                    await self.candleSvc.add_candle(candle_object)
                 
                 # Remove from tracking
                 if candle.timeframe in self.open_candles:
