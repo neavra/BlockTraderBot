@@ -18,5 +18,14 @@
       "telegram":{
         
       }
+    },
+    "data":{
+      "binance":{
+        "1H": true,
+        "4H":false
+      },
+      "hyperliquid":{
+        
+      }
     }
   }
