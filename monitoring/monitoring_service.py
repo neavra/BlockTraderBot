@@ -5,7 +5,7 @@ import threading
 from datetime import datetime
 from typing import Dict, Any, Optional
 
-from monitoring.telegram.telegram_bot import TelegramBot
+from monitoring.tele.tele_bot import TeleBot
 from monitoring.order.order_manager import OrderManager
 from monitoring.position.position_manager import PositionManager
 from monitoring.alert.alert_manager import AlertManager, TelegramAlertProvider
@@ -163,7 +163,7 @@ class MonitoringService:
         
         if telegram_config.get('enabled', False):
             # Initialize the Telegram bot using your implementation
-            self.telegram_bot = TelegramBot(
+            self.telegram_bot = TeleBot(
                 token=telegram_config.get('bot_token'),
                 chat_id=telegram_config.get('chat_id')
             )

@@ -3,7 +3,6 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler
 
-from monitoring.monitoring_service import MonitoringService
 from shared.dto.alert import Alert
 
 # Set up logging
@@ -13,7 +12,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class TelegramBot:
+class TeleBot:
     """
     Telegram Bot for trading system monitoring.
     
@@ -32,7 +31,7 @@ class TelegramBot:
         self.token = token
         self.chat_id = chat_id
         self.application = Application.builder().token(token).build()
-        self.monitoring_service = MonitoringService()
+        # self.monitoring_service = MonitoringService()
         
         # Register command handlers
         self.application.add_handler(CommandHandler("start", self.start_command))
