@@ -8,6 +8,7 @@ class Exchanges:
     SYSTEM = "system"
 
 class Queues:
+    EXTERNAL_DATA = "external_data"
     CANDLES = "candles_data"
     SIGNALS = "strategy_signals"
     ORDERS = "execution_orders"
@@ -17,19 +18,19 @@ class Queues:
 
 class RoutingKeys:
     # Market data
-    CANDLE_NEW = "candle.new.{timeframe}"
+    EXTERNAL_NEW = "external.new.{exchange}.{symbol}.{timeframe}"
+    CANDLE_NEW = "candle.new.{exchange}.{symbol}.{timeframe}"
     CANDLE_ALL = "candle.new.#"
-    TRADE_NEW = "trade.new"
     
     # Strategy
-    SIGNAL_NEW = "signal.new"
-    ORDER_BLOCK_DETECTED = "orderblock.detected"
+    SIGNAL_ALL = "signal.#"
+    ORDER_BLOCK_DETECTED = "signal.orderblock.detected.{exchange}.{symbol}.{timeframe}"
+    ORDER_EXECUTED = "signal.order.executed.{exchange}.{symbol}"
     
-    # Execution
-    ORDER_NEW = "order.new"
-    ORDER_EXECUTED = "order.executed"
-    ORDER_CANCELLED = "order.cancelled"
-    ORDER_FAILED = "order.failed"
+    # Execution - Simplified to exchange and symbol level
+    ORDER_NEW = "order.new.{exchange}.{symbol}"
+    ORDER_CANCELLED = "order.cancelled.{exchange}.{symbol}"
+    ORDER_FAILED = "order.failed.{exchange}.{symbol}"
     
     # System
     SYSTEM_ALERT = "system.alert"
@@ -38,28 +39,24 @@ class RoutingKeys:
 # Cache-related constants
 class CacheKeys:
     # Market data
-    LATEST_CANDLE = "candle:{symbol}:{timeframe}:latest"
-    CANDLE_HISTORY_SET = "candle:{symbol}:{timeframe}:history"
-    CANDLE_DATA = "candle:{symbol}:{timeframe}:{timestamp}"
+    LATEST_CANDLE = "candle:{exchange}:{symbol}:{timeframe}:latest"
+    CANDLE_HISTORY_SET = "candle:{exchange}:{symbol}:{timeframe}:history"
+    CANDLE_DATA = "candle:{exchange}:{symbol}:{timeframe}:{timestamp}"
     
     # Order blocks
-    ORDER_BLOCK = "ob:{symbol}:{timeframe}:{id}"
-    ORDER_BLOCKS_ACTIVE = "ob:{symbol}:active"
+    ORDER_BLOCK = "ob:{exchange}:{symbol}:{timeframe}:{id}"
+    ORDER_BLOCKS_ACTIVE = "ob:{exchange}:{symbol}:active"
     
     # Signals
-    SIGNAL = "signal:{id}"
-    ACTIVE_SIGNALS_HASH = "signals:active"
+    SIGNAL = "signal:{exchange}:{symbol}:{id}"
+    ACTIVE_SIGNALS_HASH = "signals:{exchange}:{symbol}:active"
     
     # Orders
-    ORDER = "order:{order_id}"
-    ACTIVE_ORDERS = "orders:{symbol}:active"
+    ORDER = "order:{exchange}:{symbol}:{order_id}"
+    ACTIVE_ORDERS = "orders:{exchange}:{symbol}:active"
     
     # Market state
-    MARKET_STATE = "market:{symbol}:state"
-    
-    # System
-    SYSTEM_STATUS = "system:status"
-    LAST_HEARTBEAT = "system:{service}:last_heartbeat"
+    MARKET_STATE = "market:{exchange}:{symbol}:state"
 
 # Time-to-live (TTL) constants (in seconds)
 class CacheTTL:
