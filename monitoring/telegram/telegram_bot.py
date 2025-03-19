@@ -3,9 +3,8 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler
 
+from monitoring.monitoring_service import MonitoringService
 from shared.dto.alert import Alert
-from order_manager import OrderManager
-from position_manager import PositionManager
 
 # Set up logging
 logging.basicConfig(
@@ -33,8 +32,7 @@ class TelegramBot:
         self.token = token
         self.chat_id = chat_id
         self.application = Application.builder().token(token).build()
-        self.order_manager = OrderManager()
-        self.position_manager = PositionManager()
+        self.monitoring_service = MonitoringService()
         
         # Register command handlers
         self.application.add_handler(CommandHandler("start", self.start_command))
@@ -71,7 +69,7 @@ class TelegramBot:
     
     async def orders_command(self, update: Update, context: CallbackContext) -> None:
         """Display active orders when the command /orders is issued."""
-        orders = self.order_manager.get_all_orders()
+        orders = self.monitoring_service.get_all_orders()
         
         if not orders:
             await update.message.reply_text("No active orders found.")
@@ -102,7 +100,7 @@ class TelegramBot:
     
     async def positions_command(self, update: Update, context: CallbackContext) -> None:
         """Display open positions when the command /positions is issued."""
-        positions = self.position_manager.get_all_positions()
+        positions = self.monitoring_service.get_all_positions()
         
         if not positions:
             await update.message.reply_text("No open positions found.")
@@ -135,8 +133,8 @@ class TelegramBot:
     
     async def status_command(self, update: Update, context: CallbackContext) -> None:
         """Display system status when the command /status is issued."""
-        orders = self.order_manager.get_all_orders()
-        positions = self.position_manager.get_all_positions()
+        orders = self.monitoring_service.get_all_orders()
+        positions = self.monitoring_service.get_all_positions()
         
         status_text = (
             "🖥️ *System Status* 🖥️\n\n"
@@ -164,7 +162,7 @@ class TelegramBot:
         await query.answer()
         
         if query.data == "refresh_orders":
-            orders = self.order_manager.get_all_orders()
+            orders = self.monitoring_service.get_all_orders()
             response = "*Active Orders:*\n\n"
             for order in orders:
                 response += (
@@ -181,7 +179,7 @@ class TelegramBot:
             await query.edit_message_text(response, parse_mode="Markdown")
         
         elif query.data == "refresh_positions":
-            positions = self.position_manager.get_all_positions()
+            positions = self.monitoring_service.get_all_positions()
             response = "*Open Positions:*\n\n"
             for position in positions:
                 pnl_emoji = "📈" if position.pnl >= 0 else "📉"
@@ -201,7 +199,7 @@ class TelegramBot:
         
         elif query.data == "view_positions":
             # Don't call positions_command directly since we're in a callback context
-            positions = self.position_manager.get_all_positions()
+            positions = self.monitoring_service.get_all_positions()
             
             if not positions:
                 await query.edit_message_text("No open positions found.")
@@ -234,7 +232,7 @@ class TelegramBot:
         
         elif query.data == "view_orders":
             # Don't call orders_command directly since we're in a callback context
-            orders = self.order_manager.get_all_orders()
+            orders = self.monitoring_service.get_all_orders()
             
             if not orders:
                 await query.edit_message_text("No active orders found.")
@@ -295,7 +293,7 @@ class TelegramBot:
     
     async def fetch_positions(self) -> None:
         """Fetch and send current positions to the configured chat."""
-        positions = self.position_manager.get_all_positions()
+        positions = self.monitoring_service.get_all_positions()
         
         if not positions:
             await self.application.bot.send_message(
@@ -327,7 +325,7 @@ class TelegramBot:
     
     async def fetch_orders(self) -> None:
         """Fetch and send current orders to the configured chat."""
-        orders = self.order_manager.get_all_orders()
+        orders = self.monitoring_service.get_all_orders()
         
         if not orders:
             await self.application.bot.send_message(
@@ -359,6 +357,21 @@ class TelegramBot:
         """Start the bot."""
         logger.info("Starting bot...")
         self.application.run_polling()
+
+    async def start_async(self):
+        """Start the bot asynchronously."""
+        logger.info("Starting bot asynchronously...")
+        
+        # Initialize the application
+        await self.application.initialize()
+        
+        # Start the application
+        await self.application.start()
+        
+        # Start polling for updates
+        await self.application.updater.start_polling()
+        
+        logger.info("Bot started asynchronously")
     
     async def stop(self) -> None:
         """Stop the bot."""

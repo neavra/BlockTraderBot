@@ -5,8 +5,16 @@ import threading
 from datetime import datetime
 from typing import Dict, Any, Optional
 
-from alert.telegram_bot import TelegramBot
+from monitoring.telegram.telegram_bot import TelegramBot
+from monitoring.order.order_manager import OrderManager
+from monitoring.position.position_manager import PositionManager
+from monitoring.alert.alert_manager import AlertManager, TelegramAlertProvider
 from shared.dto.alert import Alert, AlertType
+from shared.queue.queue_service import QueueService
+from shared.cache.cache_service import CacheService
+from shared.constants import Exchanges, Queues, RoutingKeys
+
+from execution.exchange.exchange_interface import ExchangeInterface
 
 # Set up logging
 logging.basicConfig(
@@ -23,191 +31,226 @@ class MonitoringService:
     1. Consumes events from a queue
     2. Processes events into alerts
     3. Sends alerts via Telegram
+    4. Monitors existing Orders
+    5. Interface with Orders and Positions to get data
     """
     
-    def __init__(self, telegram_bot: TelegramBot, event_queue: queue.Queue):
+    """
+    When initialising the service, __init__() has to be called to set up the basic object structure
+    and store dependencies
+    Then start() is called to use async operations to initialize components
+    and assign values to the null fields. This is because init cannot be async in python
+    """
+    def __init__(
+        self, 
+        exchange: ExchangeInterface,
+        consumer_queue: QueueService, 
+        producer_queue: QueueService,
+        cache_service: CacheService,
+        config: Dict[str, Any]
+    ):
         """
         Initialize the monitoring service.
         
         Args:
-            telegram_bot: The Telegram bot instance to use for sending alerts
-            event_queue: The queue to consume events from
+            consumer_queue: Service for consuming order messages
+            producer_queue: Service for producing Signal Messages
+            cache_service: Service for cache interactions
+            config: Configuration dictionary for the monitoring service
         """
-        self.telegram_bot = telegram_bot
-        self.event_queue = event_queue
-        self.running = False
-        self.event_thread = None
-        self.event_loop = None
-        logger.info("Monitoring service initialized")
-    
-    def _map_event_to_alert_type(self, event_type: str) -> AlertType:
-        """Map event types to AlertType enum values."""
-        event_type_map = {
-            "ORDER_PLACED": AlertType.ORDER_PLACED,
-            "ORDER_FILLED": AlertType.ORDER_FILLED,
-            "ORDER_CANCELLED": AlertType.ORDER_CANCELLED,
-            "ORDER_REJECTED": AlertType.ORDER_REJECTED,
-            "POSITION_OPENED": AlertType.POSITION_OPENED,
-            "POSITION_CLOSED": AlertType.POSITION_CLOSED,
-            "TAKE_PROFIT_HIT": AlertType.TAKE_PROFIT_HIT,
-            "STOP_LOSS_HIT": AlertType.STOP_LOSS_HIT,
-            "ORDER_BLOCK_DETECTED": AlertType.ORDER_BLOCK_DETECTED,
-            "SIGNAL_GENERATED": AlertType.SIGNAL_GENERATED,
-            "ERROR": AlertType.ERROR,
-            "WARNING": AlertType.WARNING,
-            "INFO": AlertType.INFO
-        }
-        return event_type_map.get(event_type, AlertType.INFO)
-    
-    def _process_event(self, event: Dict[str, Any]) -> Optional[Alert]:
-        """
-        Process an event and convert it into an Alert.
+        self.consumer_queue = consumer_queue
+        self.producer_queue = producer_queue
+        self.cache_service = cache_service
+        self.exchange = exchange
+
+        self.config = config or {}
         
-        Args:
-            event: The event to process
-            
-        Returns:
-            Alert object or None if the event could not be processed
-        """
-        try:
-            # Extract required fields with defaults
-            event_type = event.get("type", "INFO")
-            symbol = event.get("symbol", "Unknown")
-            message = event.get("message", "No message provided")
-            
-            # Format timestamp
-            timestamp = event.get("timestamp")
-            if not timestamp:
-                timestamp = datetime.now().isoformat()
-            
-            # Extract additional details
-            details = event.get("details", {})
-            
-            # Map event type to AlertType enum
-            alert_type = self._map_event_to_alert_type(event_type)
-            
-            # Create and return an Alert
-            return Alert(
-                type=alert_type,
-                symbol=symbol,
-                message=message,
-                timestamp=timestamp,
-                details=details
-            )
-        except Exception as e:
-            logger.error(f"Failed to process event: {e}")
-            logger.error(f"Event data: {event}")
-            return None
-    
-    async def _process_queue(self):
-        """Process events from the queue and send alerts."""
-        logger.info("Started processing event queue")
-        while self.running:
-            try:
-                # Check if there's an event in the queue (non-blocking)
-                try:
-                    event = self.event_queue.get_nowait()
-                except queue.Empty:
-                    # No events, sleep briefly and try again
-                    await asyncio.sleep(0.1)
-                    continue
-                
-                logger.info(f"Processing event: {event}")
-                
-                # Process the event into an alert
-                alert = self._process_event(event)
-                
-                if alert:
-                    # Send the alert via Telegram
-                    await self.telegram_bot.send_alert(alert)
-                
-                # Mark the event as processed
-                self.event_queue.task_done()
-                
-            except Exception as e:
-                logger.error(f"Error in event processing loop: {e}")
-                await asyncio.sleep(1)  # Brief pause before retrying
-    
-    def _run_event_loop(self):
-        """Run the asyncio event loop in a separate thread."""
-        self.event_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.event_loop)
+        self.running = False # Not active yet
         
-        # Create task for processing the queue
-        self.event_loop.create_task(self._process_queue())
+        self.order_manager = None
+        self.position_manager = None
+        self.alert_manager = None
+        self.telegram_bot = None
         
-        # Run the event loop
-        try:
-            self.event_loop.run_forever()
-        finally:
-            logger.info("Event loop stopped")
-            self.event_loop.close()
-    
-    def start(self):
-        """Start the monitoring service."""
+        # Store background tasks
+        # self.tasks = []
+
+    async def start(self):
+        """Initialize and start the monitoring service components."""
         if self.running:
             logger.warning("Monitoring service is already running")
             return
         
+        logger.info("Starting monitoring service...")
+        
+        # Initialize the exchange connector
+        await self._init_exchange()
+        
+        # Initialize managers
+        await self._init_order_manager()
+        await self._init_position_manager()
+        
+        # Initialize alert system
+        await self._init_alert_manager()
+        
+        # Initialize and start the order consumer
+        await self._init_order_consumer()
+
+        await self._init_signal_producer()
+        
+        # Start background monitoring tasks
+        # self.tasks.append(asyncio.create_task(self._monitor_positions()))
+        
         self.running = True
-        
-        # Start a separate thread for the asyncio event loop
-        self.event_thread = threading.Thread(target=self._run_event_loop, daemon=True)
-        self.event_thread.start()
-        
-        logger.info("Monitoring service started")
+        logger.info("Monitoring service started successfully")
     
-    def stop(self):
-        """Stop the monitoring service."""
+    async def stop(self):
+        """Gracefully stop the monitoring service and all its components."""
         if not self.running:
             logger.warning("Monitoring service is not running")
             return
         
         logger.info("Stopping monitoring service...")
+            
+        # Wait for tasks to complete
+        # if self.tasks:
+        #     await asyncio.gather(*self.tasks, return_exceptions=True)
+        
+        # Stop components in reverse order
+        if self.consumer_queue:
+            self.consumer_queue.stop()
+        
+        if self.producer_queue:
+            self.producer_queue.stop()
+
+        # Close connections
+        if self.exchange:
+            await self.exchange.close()
+        
         self.running = False
-        
-        # Stop the event loop
-        if self.event_loop:
-            self.event_loop.call_soon_threadsafe(self.event_loop.stop)
-        
-        # Wait for the thread to finish
-        if self.event_thread:
-            self.event_thread.join(timeout=5)
-        
         logger.info("Monitoring service stopped")
     
-    def add_event(self, event: Dict[str, Any]):
-        """
-        Add an event to the monitoring queue.
+    async def _init_exchange(self):
+        """Initialize the exchange connector for market data and order status queries."""
+        logger.info("Initializing exchange...")
+        await self.exchange.initialize()
+        logger.info("Exchange connector initialized")
+    
+    async def _init_order_manager(self):
+        """Initialize the order manager for tracking order status and history."""
+        logger.info("Initializing order manager...")
         
-        Args:
-            event: The event to add to the queue
-        """
-        self.event_queue.put(event)
-        logger.debug(f"Added event to queue: {event}")
+        # order_repository = OrderRepository()
+
+        # self.order_manager = OrderManager(order_repository)
+        logger.info("Order manager initialized")
     
-    async def fetch_and_send_positions(self):
-        """Fetch current positions and send them to the Telegram chat."""
-        try:
-            await self.telegram_bot.fetch_positions()
-            logger.info("Positions fetched and sent")
-        except Exception as e:
-            logger.error(f"Failed to fetch and send positions: {e}")
-    
-    async def fetch_and_send_orders(self):
-        """Fetch current orders and send them to the Telegram chat."""
-        try:
-            await self.telegram_bot.fetch_orders()
-            logger.info("Orders fetched and sent")
-        except Exception as e:
-            logger.error(f"Failed to fetch and send orders: {e}")
-    
-    def create_command_task(self, coroutine):
-        """
-        Create a task to run in the event loop.
+    async def _init_position_manager(self):
+        """Initialize the position manager for tracking active positions."""
+        logger.info("Initializing position manager...")
         
-        Args:
-            coroutine: The coroutine to run
-        """
-        if self.event_loop:
-            asyncio.run_coroutine_threadsafe(coroutine, self.event_loop)
+        # position_repository = PositionRepository()
+
+        # self.position_manager = PositionManager(position_repository)
+        logger.info("Position manager initialized")
+    
+    async def _init_alert_manager(self):
+        """Initialize the alert manager with a Telegram alert provider."""
+        logger.info("Initializing alert manager...")
+        
+        # Get Telegram configuration from the service config
+        telegram_config = self.config.get('telegram', {})
+        
+        if telegram_config.get('enabled', False):
+            # Initialize the Telegram bot using your implementation
+            self.telegram_bot = TelegramBot(
+                token=telegram_config.get('bot_token'),
+                chat_id=telegram_config.get('chat_id')
+            )
+            await self._run_telegram_bot()
+
+            # Create the alert provider with your Telegram bot
+            telegram_provider = TelegramAlertProvider(self.telegram_bot)
+            
+            # Initialize the alert manager with the provider
+            self.alert_manager = AlertManager(providers=[telegram_provider])
+            
+            # Start the Telegram bot if needed (consider running in background)
+            # We're not calling telegram_bot.start() here because that would block
+            # Instead, we might want to start it in a background thread if needed
+            
+            logger.info("Alert manager initialized with Telegram provider")
+        else:
+            # Initialize without providers if Telegram is disabled
+            self.alert_manager = AlertManager()
+            logger.info("Alert manager initialized without providers (Telegram disabled)")
+    
+    async def _run_telegram_bot(self):
+        """Run the Telegram bot in the background."""
+        logger.info("Starting Telegram bot...")
+        try:
+            await self.telegram_bot.start_async()
+            logger.info("Telegram bot started")
+        except Exception as e:
+            logger.error(f"Error starting Telegram bot: {str(e)}")
+    
+    
+    async def _init_order_consumer(self):
+        """Initialize the order event consumer to process order updates."""
+        logger.info("Initializing order event consumer...")
+        
+        # Ensure queue exchange and queue exist
+        self.consumer_queue.declare_exchange(Exchanges.EXECUTION)
+        self.consumer_queue.declare_queue(Queues.ORDERS)
+        self.consumer_queue.bind_queue(
+            Exchanges.EXECUTION,
+            Queues.ORDERS,
+            RoutingKeys.ORDER_NEW
+        )
+        
+        logger.info("Order event consumer initialized")
+
+    async def _init_signal_producer(self):
+        """Initialize the signal event producer to produce events when orders are executed."""
+        logger.info("Initializing signal event producer...")
+        
+        # Ensure queue exchange and queue exist
+        self.producer_queue.declare_exchange(Exchanges.STRATEGY)
+        self.producer_queue.declare_queue(Queues.SIGNALS)
+        self.producer_queue.bind_queue(
+            Exchanges.STRATEGY,
+            Queues.SIGNALS,
+            RoutingKeys.ORDER_EXECUTED
+        )
+        
+        logger.info("Signal event producer initialized")
+    
+    # This method is called by the telegram bot, which wraps the call to the position manager
+    def get_all_positions(self):
+        return []
+    
+    # This method is called by the telegram bot, which wraps the call to the order manager
+    def get_all_orders(self):
+        return []
+    
+    # This method is binded to the queue, and the callback is registered here when receiving an event
+    # On event, it should get the data from the cache, and check_order_status persistently
+    # It should also create an alert that a new order is created
+    def on_event():
+        logger.info("Event received")
+
+    # This method is called when the order status is executed, this should also create an alert
+    # After create, it needs to publish a signal to the signal queue
+    def on_executed():
+        logger.info("Order Executed")
+    
+    def build_alert():
+        logger.info("Building alert object")
+
+    def send_alert():
+        logger.info("Sending Alert")
+
+    # This method is a task that keeps checking on the status of the orders in the cache until something changes
+    # Uses the exchange connector to quert the status, gets the order id from the cache
+    def check_order_status():
+        logger.info("Checking order status")
