@@ -3,12 +3,17 @@ import asyncio
 import json
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
+from shared.queue.queue_service import QueueService
+from shared.cache.cache_service import CacheService
 
 from execution.exchange.exchange_interface import ExchangeInterface
+from shared.constants import Exchanges, Queues, RoutingKeys
+from shared.dto.order import Order
+
 
 logger = logging.getLogger(__name__)
 
-class ExchangeExecutor:
+class ExchangeService:
     """
     Exchange Executor handles the process of converting trading signals into actual orders.
     
@@ -19,8 +24,21 @@ class ExchangeExecutor:
     4. Publishes order events to another queue for tracking
     5. Caches order objects for later reference
     """
-    
-    def __init__(self, exchange: ExchangeInterface, config: Dict[str, Any]):
+
+
+    """
+    When initialising the service, __init__() has to be called to set up the basic object structure
+    and store dependencies
+    Then start() is called to use async operations to initialize components
+    and assign values to the null fields. This is because init cannot be async in python
+    """
+    def __init__(
+        self, 
+        exchange: ExchangeInterface,
+        consumer_queue: QueueService, 
+        producer_queue: QueueService,
+        cache_service: CacheService,
+        config: Dict[str, Any]):
         """
         Initialize the Exchange Executor.
         
@@ -32,15 +50,77 @@ class ExchangeExecutor:
                 - risk_settings: Risk management parameters
         """
         self.exchange = exchange
+        self.consumer_queue = consumer_queue
+        self.producer_queue = producer_queue
+        self.cache_service = cache_service
         self.config = config
+        self.running = False 
         
-        # Initialize message queue connections
-        self.signal_queue = None  # Will be initialized later
-        self.event_queue = None   # Will be initialized later
+    async def start(self):
+        """Initialize and start the monitoring service components."""
+        if self.running:
+            logger.warning("Execution service is already running")
+            return
         
-        # Initialize cache connection
-        self.order_cache = None   # Will be initialized later
+        logger.info("Starting execution service...")
         
+        # Initialize the exchange connector
+        await self._init_exchange()
+
+        await self._init_signal_consumer()
+
+        await self._init_order_producer()
+
+        self.running = True
+        logger.info("Execution service started successfully")
+        
+    async def stop(self):
+        logger.info("Stopping execution service...")
+
+        if self.exchange:
+            await self.exchange.close()
+
+        if self.consumer_queue:
+            self.consumer_queue.stop()
+        
+        if self.producer_queue:
+            self.producer_queue.stop()
+
+    async def _init_exchange(self):
+        """Initialize the exchange for order execution."""
+        logger.info("Initializing exchange...")
+        await self.exchange.initialize()
+        logger.info("Exchange connector initialized")
+
+    async def _init_signal_consumer(self):
+        """Initialize the signal event consumer to process signals generated."""
+        logger.info("Initializing signal event consumer...")
+        self.consumer_queue.declare_exchange(Exchanges.STRATEGY)
+        self.consumer_queue.declare_queue(Queues.SIGNALS)
+        self.consumer_queue.bind_queue(
+            Exchanges.STRATEGY,
+            Queues.SIGNALS,
+            RoutingKeys.SIGNAL_ALL
+        )
+        
+        logger.info("Signal event consumer initialized")
+
+    async def _init_order_producer(self):
+        """Initialize the order event producer to produce events when orders are placed."""
+        logger.info("Initializing order event producer...")
+
+        # Ensure queue exchange and queue exist
+        self.producer_queue.declare_exchange(Exchanges.EXECUTION)
+        self.producer_queue.declare_queue(Queues.ORDERS)
+        self.producer_queue.bind_queue(
+            Exchanges.EXECUTION,
+            Queues.ORDERS,
+            RoutingKeys.ORDER_NEW
+        )
+        
+        logger.info("Order event producer initialized")
+
+
     async def process_signal(self, signal: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Process a trading signal and prepare order parameters.
