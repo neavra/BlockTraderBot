@@ -13,7 +13,7 @@ from shared.dto.order import Order
 
 logger = logging.getLogger(__name__)
 
-class ExchangeService:
+class ExecutionService:
     """
     Exchange Executor handles the process of converting trading signals into actual orders.
     

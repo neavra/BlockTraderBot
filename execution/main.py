@@ -9,7 +9,7 @@ from shared.cache.cache_service import CacheService
 
 from exchange.hyperliquid import HyperliquidExchange
 from exchange.exchange_interface import ExchangeInterface
-from exchange_service import ExchangeService
+from execution.execution_service import ExecutionService
 
 from config.config_loader import load_config
 
@@ -39,7 +39,7 @@ async def run_service(
     """
     try:
         # Create exchange service
-        exchange_service = ExchangeService(
+        execution_service = ExecutionService(
             exchange=exchange,
             consumer_queue=consumer_queue,
             producer_queue=producer_queue,
@@ -48,7 +48,7 @@ async def run_service(
         )
         
         # Start the service
-        await exchange_service.start()
+        await execution_service.start()
         
         # Keep the service running
         try:
@@ -59,7 +59,7 @@ async def run_service(
             logger.info("Service shutdown initiated")
         finally:
             # Graceful shutdown
-            await exchange_service.stop()
+            await execution_service.stop()
     
     except Exception as e:
         logger.error(f"Error running exchange service: {e}", exc_info=True)
