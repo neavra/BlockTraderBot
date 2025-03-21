@@ -13,6 +13,7 @@ from shared.dto.alert import Alert, AlertType
 from shared.queue.queue_service import QueueService
 from shared.cache.cache_service import CacheService
 from shared.constants import Exchanges, Queues, RoutingKeys
+from shared.dto.order import Order
 
 from execution.exchange.exchange_interface import ExchangeInterface
 
@@ -71,6 +72,7 @@ class MonitoringService:
         self.position_manager = None
         self.alert_manager = None
         self.telegram_bot = None
+        self.main_loop = None
         
         # Store background tasks
         # self.tasks = []
@@ -82,6 +84,8 @@ class MonitoringService:
             return
         
         logger.info("Starting monitoring service...")
+
+        self.main_loop = asyncio.get_running_loop()
         
         # Initialize the exchange connector
         await self._init_exchange()
@@ -159,13 +163,13 @@ class MonitoringService:
         logger.info("Initializing alert manager...")
         
         # Get Telegram configuration from the service config
-        telegram_config = self.config.get('telegram', {})
+        telegram_config = self.config['monitoring']['telegram']
         
-        if telegram_config.get('enabled', False):
+        if telegram_config:
             # Initialize the Telegram bot using your implementation
             self.telegram_bot = TeleBot(
                 token=telegram_config.get('bot_token'),
-                chat_id=telegram_config.get('chat_id')
+                chat_id=telegram_config.get('chat_id'),
             )
             await self._run_telegram_bot()
 
@@ -207,6 +211,12 @@ class MonitoringService:
             Queues.ORDERS,
             RoutingKeys.ORDER_NEW
         )
+
+        # Subscribe to the queue with a callback
+        self.consumer_queue.subscribe(
+            Queues.ORDERS,
+            self.on_event
+        )
         
         logger.info("Order event consumer initialized")
 
@@ -236,8 +246,40 @@ class MonitoringService:
     # This method is binded to the queue, and the callback is registered here when receiving an event
     # On event, it should get the data from the cache, and check_order_status persistently
     # It should also create an alert that a new order is created
-    def on_event():
-        logger.info("Event received")
+    def on_event(self, event):
+        """Synchronous callback that schedules async work"""
+        # Log receipt of the event synchronously
+        logger.info(f"Received order event: {event}")
+        
+        try:
+            # Create an alert object
+            alert = Alert(
+                type=AlertType.ORDER_PLACED,
+                symbol=event.get("symbol", "unknown"),
+                message=f"Order {event.get('order_id', 'unknown')} received",
+                timestamp=datetime.now(),
+                details=event
+            )
+            
+            # Use run_coroutine_threadsafe to schedule the async task from this thread
+            # This requires having a reference to the main event loop
+            asyncio.run_coroutine_threadsafe(
+                self._process_event_async(event, alert), 
+                self.main_loop  # You need to store the main loop as an instance variable
+            )
+            
+        except Exception as e:
+            logger.error(f"Error scheduling event processing: {str(e)}")
+
+    async def _process_event_async(self, event, alert):
+        """Async method that handles the actual processing"""
+        try:
+            # Do any async processing here
+            if self.alert_manager:
+                await self.alert_manager.send_alert(alert)
+                logger.info(f"Alert sent for order {event.get('order_id', 'unknown')}")
+        except Exception as e:
+            logger.error(f"Async processing error: {str(e)}")
 
     # This method is called when the order status is executed, this should also create an alert
     # After create, it needs to publish a signal to the signal queue

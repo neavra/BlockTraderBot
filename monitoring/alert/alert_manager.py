@@ -6,7 +6,8 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
 
-from shared.dto.alert import Alert  # Using your existing Alert class
+from shared.dto.alert import Alert
+from monitoring.tele.tele_bot import TeleBot
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ class AlertProvider(ABC):
 class TelegramAlertProvider(AlertProvider):
     """Telegram implementation of the alert provider."""
     
-    def __init__(self, telegram_bot):
+    def __init__(self, telegram_bot: TeleBot):
         """
         Initialize the Telegram alert provider.
         
@@ -52,7 +53,6 @@ class TelegramAlertProvider(AlertProvider):
             # Use the existing telegram bot's send_alert method
             await self.telegram_bot.send_alert(alert)
             return True
-            
         except Exception as e:
             logger.error(f"Failed to send Telegram alert: {str(e)}")
             return False
@@ -107,14 +107,10 @@ class AlertManager:
             logger.warning("No alert providers configured")
             return False
         
-        # Record the alert in history
-        self._add_to_history(alert)
-        
         # Send through all providers
-        results = await asyncio.gather(
-            *[provider.send_alert(alert) for provider in self.providers],
-            return_exceptions=True
-        )
+        results = []
+        for providers in self.providers:
+            results.append(await providers.send_alert(alert=alert))
         
         # Check if at least one provider succeeded
         success = any(
@@ -126,28 +122,3 @@ class AlertManager:
             logger.error(f"Failed to send alert through any provider: {alert.message}")
         
         return success
-    
-    def _add_to_history(self, alert: Alert):
-        """Add an alert to the history, maintaining the maximum size."""
-        self.alert_history.append(alert)
-        
-        # Trim history if it exceeds the maximum size
-        if len(self.alert_history) > self.max_history:
-            self.alert_history = self.alert_history[-self.max_history:]
-    
-    def get_recent_alerts(self, limit: int = 10, alert_type: Optional[str] = None) -> List[Alert]:
-        """
-        Get recent alerts from history.
-        
-        Args:
-            limit: Maximum number of alerts to return
-            alert_type: Optional type to filter by
-            
-        Returns:
-            List of recent alert records
-        """
-        if alert_type:
-            filtered = [a for a in self.alert_history if a.type.name == alert_type]
-            return filtered[-limit:]
-        else:
-            return self.alert_history[-limit:]
