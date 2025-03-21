@@ -118,7 +118,7 @@ async def run_all_tests(exchange):
     test_symbol = "BTC/USDC:USDC"        
     await test_create_order(exchange, test_symbol)
 
-async def run_execution_layer():
+async def run_exchange():
     """Run the execution layer in isolation"""
     print("Starting execution layer...")
     
@@ -158,4 +158,4 @@ async def run_execution_layer():
 
 if __name__ == "__main__":
     # Run the execution layer
-    asyncio.run(run_execution_layer())
+    asyncio.run(run_exchange())
