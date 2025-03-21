@@ -44,6 +44,15 @@ class TeleBot:
         self.application.add_handler(CallbackQueryHandler(self.button_callback))
         
         logger.info("Telegram bot initialized")
+
+        # Function-Based dependency injection due to circular dependency
+        self.get_orders_func = None
+        self.get_positions_func = None
+
+    # This method injects the functions as dependencies instead of the object  
+    def set_data_providers(self, get_orders_func, get_positions_func):
+        self.get_orders_func = get_orders_func
+        self.get_positions_func = get_positions_func
     
     async def start_command(self, update: Update, context: CallbackContext) -> None:
         """Send a welcome message when the command /start is issued."""
@@ -68,7 +77,10 @@ class TeleBot:
     
     async def orders_command(self, update: Update, context: CallbackContext) -> None:
         """Display active orders when the command /orders is issued."""
-        orders = self.monitoring_service.get_all_orders()
+        if self.get_orders_func:
+            orders = self.get_orders_func()
+        else:
+            logger.error("Orders method not initialised")
         
         if not orders:
             await update.message.reply_text("No active orders found.")
@@ -99,7 +111,10 @@ class TeleBot:
     
     async def positions_command(self, update: Update, context: CallbackContext) -> None:
         """Display open positions when the command /positions is issued."""
-        positions = self.monitoring_service.get_all_positions()
+        if self.get_positions_func:
+            positions = self.get_positions_func()
+        else:
+            logger.error("Positions method not initialised")
         
         if not positions:
             await update.message.reply_text("No open positions found.")
@@ -132,8 +147,14 @@ class TeleBot:
     
     async def status_command(self, update: Update, context: CallbackContext) -> None:
         """Display system status when the command /status is issued."""
-        orders = self.monitoring_service.get_all_orders()
-        positions = self.monitoring_service.get_all_positions()
+        if self.get_orders_func:
+            orders = self.get_orders_func()
+        else:
+            logger.error("Orders method not initialised")
+        if self.get_positions_func:
+            positions = self.get_positions_func()
+        else:
+            logger.error("Positions method not initialised")
         
         status_text = (
             "🖥️ *System Status* 🖥️\n\n"
@@ -161,7 +182,10 @@ class TeleBot:
         await query.answer()
         
         if query.data == "refresh_orders":
-            orders = self.monitoring_service.get_all_orders()
+            if self.get_orders_func:
+                orders = self.get_orders_func()
+            else:
+                logger.error("Orders method not initialised")
             response = "*Active Orders:*\n\n"
             for order in orders:
                 response += (
@@ -178,7 +202,10 @@ class TeleBot:
             await query.edit_message_text(response, parse_mode="Markdown")
         
         elif query.data == "refresh_positions":
-            positions = self.monitoring_service.get_all_positions()
+            if self.get_positions_func:
+                positions = self.get_positions_func()
+            else:
+                logger.error("Positions method not initialised")
             response = "*Open Positions:*\n\n"
             for position in positions:
                 pnl_emoji = "📈" if position.pnl >= 0 else "📉"
@@ -198,7 +225,10 @@ class TeleBot:
         
         elif query.data == "view_positions":
             # Don't call positions_command directly since we're in a callback context
-            positions = self.monitoring_service.get_all_positions()
+            if self.get_positions_func:
+                positions = self.get_positions_func()
+            else:
+                logger.error("Positions method not initialised")
             
             if not positions:
                 await query.edit_message_text("No open positions found.")
@@ -231,8 +261,11 @@ class TeleBot:
         
         elif query.data == "view_orders":
             # Don't call orders_command directly since we're in a callback context
-            orders = self.monitoring_service.get_all_orders()
-            
+            if self.get_orders_func:
+                orders = self.get_orders_func()
+            else:
+                logger.error("Orders method not initialised")
+                
             if not orders:
                 await query.edit_message_text("No active orders found.")
                 return
@@ -292,7 +325,10 @@ class TeleBot:
     
     async def fetch_positions(self) -> None:
         """Fetch and send current positions to the configured chat."""
-        positions = self.monitoring_service.get_all_positions()
+        if self.get_positions_func:
+            positions = self.get_positions_func()
+        else:
+            logger.error("Positions method not initialised")
         
         if not positions:
             await self.application.bot.send_message(
@@ -324,7 +360,10 @@ class TeleBot:
     
     async def fetch_orders(self) -> None:
         """Fetch and send current orders to the configured chat."""
-        orders = self.monitoring_service.get_all_orders()
+        if self.get_orders_func:
+            orders = self.get_orders_func()
+        else:
+            logger.error("Orders method not initialised")
         
         if not orders:
             await self.application.bot.send_message(

@@ -4,7 +4,7 @@ from shared.dto.order import Order
 class OrderManager:
     """Placeholder for order management functionality"""
     
-    def __init__(self, order_repository):
+    def __init__(self):
         """
         Initialize the order service.
         
@@ -12,7 +12,7 @@ class OrderManager:
             order_repository: Repository for accessing order data
             exchange_connector: Connector for communicating with the exchange
         """
-        self.repository = order_repository
+        # self.repository = order_repository
         # Hardcoded sample orders for demonstration
         self.orders = [
             Order(

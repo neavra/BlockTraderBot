@@ -147,6 +147,7 @@ class MonitoringService:
         # order_repository = OrderRepository()
 
         # self.order_manager = OrderManager(order_repository)
+        self.order_manager = OrderManager()
         logger.info("Order manager initialized")
     
     async def _init_position_manager(self):
@@ -156,6 +157,7 @@ class MonitoringService:
         # position_repository = PositionRepository()
 
         # self.position_manager = PositionManager(position_repository)
+        self.position_manager = PositionManager()
         logger.info("Position manager initialized")
     
     async def _init_alert_manager(self):
@@ -171,6 +173,11 @@ class MonitoringService:
                 token=telegram_config.get('bot_token'),
                 chat_id=telegram_config.get('chat_id'),
             )
+
+            self.telegram_bot.set_data_providers(
+                    self.get_all_orders,
+                    self.get_all_positions
+                )
             await self._run_telegram_bot()
 
             # Create the alert provider with your Telegram bot
@@ -237,11 +244,11 @@ class MonitoringService:
     
     # This method is called by the telegram bot, which wraps the call to the position manager
     def get_all_positions(self):
-        return []
+        return self.position_manager.get_all_positions()
     
     # This method is called by the telegram bot, which wraps the call to the order manager
     def get_all_orders(self):
-        return []
+        return self.order_manager.get_all_orders()
     
     # This method is binded to the queue, and the callback is registered here when receiving an event
     # On event, it should get the data from the cache, and check_order_status persistently
