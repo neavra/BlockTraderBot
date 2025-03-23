@@ -10,5 +10,42 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+    networks:
+      - data-layer
     volumes:
       - ./data:/var/lib/postgresql/data
+  rabbitmq:
+    image: rabbitmq:4.0-management
+    container_name: rabbitmq
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    networks:
+      - data-layer
+    ports:
+      - "5672:5672"  # AMQP protocol port
+      - "15672:15672" # Management UI
+    # Redis cache
+  cache:
+    image: redis:7-alpine
+    container_name: redis-data-layer
+    restart: always
+    command: redis-server --requirepass ${REDIS_PASSWORD:-}
+    volumes:
+      - cache:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - data-layer
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+networks:
+  data-layer:
+    driver: bridge
+
+volumes:
+  cache:
