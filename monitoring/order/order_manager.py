@@ -5,6 +5,14 @@ class OrderManager:
     """Placeholder for order management functionality"""
     
     def __init__(self):
+        """
+        Initialize the order service.
+        
+        Args:
+            order_repository: Repository for accessing order data
+            exchange_connector: Connector for communicating with the exchange
+        """
+        # self.repository = order_repository
         # Hardcoded sample orders for demonstration
         self.orders = [
             Order(
@@ -40,6 +48,7 @@ class OrderManager:
         ]
     
     def get_all_orders(self) -> List[Order]:
+        # return await self.repository.get_all_orders()
         return self.orders
 
     def get_orders_by_symbol(self, symbol: str) -> List[Order]:

@@ -1,60 +1,100 @@
-import os
-import sys
 import asyncio
-from pathlib import Path
+import logging
+import os
+from typing import Dict, Any
 
-# Add the project root to the Python path if running this file directly
-if __name__ == "__main__":
-    # Get the absolute path of the current script
-    current_dir = Path(__file__).resolve().parent
-    # Add the parent directory (project root) to sys.path
-    project_root = current_dir.parent
-    sys.path.append(str(project_root))
+# Import necessary services and exchange
+from shared.queue.queue_service import QueueService
+from shared.cache.cache_service import CacheService
 
-# Now you can import from the config package
+from exchange.hyperliquid import HyperliquidExchange
+from exchange.exchange_interface import ExchangeInterface
+from execution.execution_service import ExecutionService
+
 from config.config_loader import load_config
-from execution.exchange.hyperliquid import HyperliquidExchange
-from execution.test import run_all_tests
-# from execution.exchange.exchange_executor import ExchangeExecutor
 
-async def run_execution_layer():
-    """Run the execution layer in isolation"""
-    print("Starting execution layer...")
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+async def run_service(
+    exchange: ExchangeInterface, 
+    consumer_queue: QueueService, 
+    producer_queue: QueueService,
+    cache_service: CacheService,
+    config: Dict[str, Any]
+):
+    """
+    Initialize and run the exchange service.
     
-    # Load the full config
-    config = load_config()
-    
-    # Extract execution-specific config
-    exchange_config = config['exchanges']['hyperliquid']
-    test_run = config.get('execution', {}).get('test_run', False)
-    # risk_config = config['risk_settings']
-    
-    # Create and initialize exchange
-    exchange = HyperliquidExchange(exchange_config)
-    
-    if not await exchange.initialize():
-        print("Failed to initialize exchange connection")
-        return
-    
-    # # Create executor with combined config
-    # executor_config = {
-    #     'risk_settings': risk_config,
-    #     # Add other configs needed by executor
-    # }
-    # executor = ExchangeExecutor(exchange, executor_config)
-    
-    # Example: Test exchange by fetching balance
+    Args:
+        exchange: Hyperliquid exchange interface
+        consumer_queue: Queue service for consuming signals
+        producer_queue: Queue service for producing order events
+        cache_service: Cache service for storing order information
+        config: Configuration dictionary
+    """
     try:
-        balance = await exchange.fetch_balance()
-        print(f"Account balance: {balance}")
-        if test_run:
-            await run_all_tests(exchange)
+        # Create exchange service
+        execution_service = ExecutionService(
+            exchange=exchange,
+            consumer_queue=consumer_queue,
+            producer_queue=producer_queue,
+            cache_service=cache_service,
+            config=config
+        )
+        
+        # Start the service
+        await execution_service.start()
+        
+        # Keep the service running
+        try:
+            # This could be replaced with more sophisticated service management
+            while True:
+                await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            logger.info("Service shutdown initiated")
+        finally:
+            # Graceful shutdown
+            await execution_service.stop()
+    
     except Exception as e:
-        print(f"Error during execution: {e}")
-    finally:
-        # Close exchange connection
-        await exchange.close()
+        logger.error(f"Error running exchange service: {e}", exc_info=True)
 
-if __name__ == "__main__":
-    # Run the execution layer
-    asyncio.run(run_execution_layer())
+async def main():
+    """
+    Main entry point for the application.
+    Initializes all required services and runs the exchange service.
+    """
+    try:
+        # Load configuration
+        config = load_config()
+        
+        # Initialize Hyperliquid exchange
+        exchange = HyperliquidExchange(config)
+        
+        # Initialize RabbitMQ queue services
+        consumer_queue = QueueService(host='localhost')
+        producer_queue = QueueService(host='localhost')
+        
+        # Initialize Redis cache service
+        cache_service = CacheService()
+        
+        # Run the service
+        await run_service(
+            exchange=exchange,
+            consumer_queue=consumer_queue,
+            producer_queue=producer_queue,
+            cache_service=cache_service,
+            config=config
+        )
+    
+    except Exception as e:
+        logger.error(f"Fatal error in main application: {e}", exc_info=True)
+
+if __name__ == '__main__':
+    # Run the async main function
+    asyncio.run(main())

@@ -1,80 +1,57 @@
-import sys
+# monitoring_layer/main.py
 import asyncio
-from pathlib import Path
 import logging
-import queue
-import threading
-import time
-from datetime import datetime
+import argparse
+from config.config_loader import load_config
+from shared.queue.queue_service import QueueService
+from shared.cache.cache_service import CacheService
+from monitoring.monitoring_service import MonitoringService
 
-from alert.telegram_bot import TelegramBot
-from shared.dto.alert import AlertType
-from monitoring_service import MonitoringService
+from execution.exchange.hyperliquid import HyperliquidExchange
 
-# Set up logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
 logger = logging.getLogger(__name__)
 
-# Add the project root to the Python path if running this file directly
-if __name__ == "__main__":
-    # Get the absolute path of the current script
-    current_dir = Path(__file__).resolve().parent
-    # Add the parent directory (project root) to sys.path
-    project_root = current_dir.parent
-    sys.path.append(str(project_root))
-
-from config.config_loader import load_config
-
-def run_monitoring_layer():
-    """Main entry point for the application."""
-    config = load_config()
-    telegram_config = config['monitoring']['telegram']
-    # Replace with your actual Telegram bot token and chat ID
-    BOT_TOKEN = telegram_config.get('bot_token')
-    CHAT_ID = telegram_config.get('chat_id')
-    
-    # Initialize the Telegram bot
-    bot = TelegramBot(token=BOT_TOKEN, chat_id=CHAT_ID)
-    
-    # Create an event queue
-    event_queue = queue.Queue()
-    
-    # Initialize the monitoring service
-    monitoring_service = MonitoringService(telegram_bot=bot, event_queue=event_queue)
-    
-    # Start the monitoring service
-    monitoring_service.start()
-    
-    # Start the Telegram bot in a separate thread
-    bot_thread = threading.Thread(target=bot.start, daemon=True)
-    bot_thread.start()
-    
-    logger.info("Application started. Press Ctrl+C to stop.")
-    
-    # Example: Add a test event once everything is running
-    time.sleep(2)  # Give services time to initialize
-    monitoring_service.add_event({
-        "type": "INFO",
-        "symbol": "SYSTEM",
-        "message": "Trading system started and ready",
-        "timestamp": datetime.now().isoformat(),
-        "details": {
-            "Status": "Running",
-            "Version": "1.0.0"
-        }
-    })
-    
-    # Keep the main thread running
+async def run_service(exchange, consumer_queue, producer_queue, cache_service, config):
     try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        logger.info("Shutting down application...")
-        monitoring_service.stop()
-        logger.info("Application stopped.")
+        monitoring_service = MonitoringService(
+            exchange=exchange,
+            consumer_queue=consumer_queue,
+            producer_queue=producer_queue,
+            cache_service=cache_service,
+            config=config
+        )
+        
+        # Start the service (calls async start())
+        await monitoring_service.start()
+
+        try:
+            # This could be replaced with more sophisticated service management
+            while True:
+                await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            logger.info("Service shutdown initiated")
+        finally:
+            # Graceful shutdown
+            await monitoring_service.stop()
+    except Exception as e:
+        logger.error(f"Fatal error in main application: {e}", exc_info=True)
+
+async def main():
+    config = load_config()
+    # Initialize dependencies
+    exchange = HyperliquidExchange(config)
+    consumer_queue = QueueService()
+    producer_queue = QueueService()
+    
+    cache_service = CacheService()
+
+    await run_service(
+            exchange=exchange,
+            consumer_queue=consumer_queue,
+            producer_queue=producer_queue,
+            cache_service=cache_service,
+            config=config
+        )
 
 if __name__ == "__main__":
-    run_monitoring_layer()
+    asyncio.run(main())

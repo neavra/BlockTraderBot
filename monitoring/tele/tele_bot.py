@@ -4,8 +4,6 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler
 
 from shared.dto.alert import Alert
-from order_manager import OrderManager
-from position_manager import PositionManager
 
 # Set up logging
 logging.basicConfig(
@@ -14,7 +12,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class TelegramBot:
+class TeleBot:
     """
     Telegram Bot for trading system monitoring.
     
@@ -33,8 +31,7 @@ class TelegramBot:
         self.token = token
         self.chat_id = chat_id
         self.application = Application.builder().token(token).build()
-        self.order_manager = OrderManager()
-        self.position_manager = PositionManager()
+        # self.monitoring_service = MonitoringService()
         
         # Register command handlers
         self.application.add_handler(CommandHandler("start", self.start_command))
@@ -47,6 +44,15 @@ class TelegramBot:
         self.application.add_handler(CallbackQueryHandler(self.button_callback))
         
         logger.info("Telegram bot initialized")
+
+        # Function-Based dependency injection due to circular dependency
+        self.get_orders_func = None
+        self.get_positions_func = None
+
+    # This method injects the functions as dependencies instead of the object  
+    def set_data_providers(self, get_orders_func, get_positions_func):
+        self.get_orders_func = get_orders_func
+        self.get_positions_func = get_positions_func
     
     async def start_command(self, update: Update, context: CallbackContext) -> None:
         """Send a welcome message when the command /start is issued."""
@@ -71,7 +77,10 @@ class TelegramBot:
     
     async def orders_command(self, update: Update, context: CallbackContext) -> None:
         """Display active orders when the command /orders is issued."""
-        orders = self.order_manager.get_all_orders()
+        if self.get_orders_func:
+            orders = self.get_orders_func()
+        else:
+            logger.error("Orders method not initialised")
         
         if not orders:
             await update.message.reply_text("No active orders found.")
@@ -102,7 +111,10 @@ class TelegramBot:
     
     async def positions_command(self, update: Update, context: CallbackContext) -> None:
         """Display open positions when the command /positions is issued."""
-        positions = self.position_manager.get_all_positions()
+        if self.get_positions_func:
+            positions = self.get_positions_func()
+        else:
+            logger.error("Positions method not initialised")
         
         if not positions:
             await update.message.reply_text("No open positions found.")
@@ -135,8 +147,14 @@ class TelegramBot:
     
     async def status_command(self, update: Update, context: CallbackContext) -> None:
         """Display system status when the command /status is issued."""
-        orders = self.order_manager.get_all_orders()
-        positions = self.position_manager.get_all_positions()
+        if self.get_orders_func:
+            orders = self.get_orders_func()
+        else:
+            logger.error("Orders method not initialised")
+        if self.get_positions_func:
+            positions = self.get_positions_func()
+        else:
+            logger.error("Positions method not initialised")
         
         status_text = (
             "🖥️ *System Status* 🖥️\n\n"
@@ -164,7 +182,10 @@ class TelegramBot:
         await query.answer()
         
         if query.data == "refresh_orders":
-            orders = self.order_manager.get_all_orders()
+            if self.get_orders_func:
+                orders = self.get_orders_func()
+            else:
+                logger.error("Orders method not initialised")
             response = "*Active Orders:*\n\n"
             for order in orders:
                 response += (
@@ -181,7 +202,10 @@ class TelegramBot:
             await query.edit_message_text(response, parse_mode="Markdown")
         
         elif query.data == "refresh_positions":
-            positions = self.position_manager.get_all_positions()
+            if self.get_positions_func:
+                positions = self.get_positions_func()
+            else:
+                logger.error("Positions method not initialised")
             response = "*Open Positions:*\n\n"
             for position in positions:
                 pnl_emoji = "📈" if position.pnl >= 0 else "📉"
@@ -201,7 +225,10 @@ class TelegramBot:
         
         elif query.data == "view_positions":
             # Don't call positions_command directly since we're in a callback context
-            positions = self.position_manager.get_all_positions()
+            if self.get_positions_func:
+                positions = self.get_positions_func()
+            else:
+                logger.error("Positions method not initialised")
             
             if not positions:
                 await query.edit_message_text("No open positions found.")
@@ -234,8 +261,11 @@ class TelegramBot:
         
         elif query.data == "view_orders":
             # Don't call orders_command directly since we're in a callback context
-            orders = self.order_manager.get_all_orders()
-            
+            if self.get_orders_func:
+                orders = self.get_orders_func()
+            else:
+                logger.error("Orders method not initialised")
+                
             if not orders:
                 await query.edit_message_text("No active orders found.")
                 return
@@ -295,7 +325,10 @@ class TelegramBot:
     
     async def fetch_positions(self) -> None:
         """Fetch and send current positions to the configured chat."""
-        positions = self.position_manager.get_all_positions()
+        if self.get_positions_func:
+            positions = self.get_positions_func()
+        else:
+            logger.error("Positions method not initialised")
         
         if not positions:
             await self.application.bot.send_message(
@@ -327,7 +360,10 @@ class TelegramBot:
     
     async def fetch_orders(self) -> None:
         """Fetch and send current orders to the configured chat."""
-        orders = self.order_manager.get_all_orders()
+        if self.get_orders_func:
+            orders = self.get_orders_func()
+        else:
+            logger.error("Orders method not initialised")
         
         if not orders:
             await self.application.bot.send_message(
@@ -359,6 +395,21 @@ class TelegramBot:
         """Start the bot."""
         logger.info("Starting bot...")
         self.application.run_polling()
+
+    async def start_async(self):
+        """Start the bot asynchronously."""
+        logger.info("Starting bot asynchronously...")
+        
+        # Initialize the application
+        await self.application.initialize()
+        
+        # Start the application
+        await self.application.start()
+        
+        # Start polling for updates
+        await self.application.updater.start_polling()
+        
+        logger.info("Bot started asynchronously")
     
     async def stop(self) -> None:
         """Stop the bot."""
