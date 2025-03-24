@@ -60,28 +60,25 @@ class CandleConsumer(BaseConsumer[CandleData]):
         
         try:
             # Check if the candle already exists TODO: Go and fix the repo function
-            existing_candle = await self.repository.find_by_composite_key(
+            existing_candle = self.repository.find_by_exchange_symbol_timeframe(
                 exchange=candle.exchange,
                 symbol=candle.symbol,
                 timeframe=candle.timeframe,
                 timestamp=candle.timestamp
             )
-            
-            if existing_candle:
+            self.logger.debug("Existing Candle:" + str(existing_candle))
+            if len(existing_candle) > 0:
                 # Update the existing candle
                 self.logger.debug(f"Updating existing candle: {candle.timestamp}")
-                await self.repository.update(
-                    id=existing_candle.id,
-                    open=candle.open,
-                    high=candle.high,
-                    low=candle.low,
-                    close=candle.close,
-                    volume=candle.volume
+                candle.id = existing_candle[0].id
+                self.repository.update(
+                    id=existing_candle[0].id,
+                    domain_obj=candle
                 )
             else:
                 # Create a new candle
                 self.logger.debug(f"Creating new candle: {candle.timestamp}")
-                await self.repository.create(candle)
+                self.repository.create(candle)
             
             self.logger.debug(f"Successfully processed candle: {candle.timestamp}")
             

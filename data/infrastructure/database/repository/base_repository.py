@@ -1,10 +1,12 @@
 from typing import TypeVar, Generic, Type, List, Optional, Any, Dict, Union
+import logging
 from sqlalchemy.orm import Session
-from sqlalchemy import select, update, delete
+from sqlalchemy.exc import SQLAlchemyError
 
 from ..base import BaseModel
 
 T = TypeVar('T', bound=BaseModel)
+D = TypeVar('D')  # Domain model type
 
 
 class BaseRepository(Generic[T]):
@@ -25,8 +27,17 @@ class BaseRepository(Generic[T]):
         """
         self.model_class = model_class
         self.session = session
+        self.logger = logging.getLogger(__name__)
     
-    def get_by_id(self, id: int) -> Optional[T]:
+    def _to_domain(self, db_obj: T) -> D:
+        """Convert DB model to domain model."""
+        raise NotImplementedError("Must implement in subclass")
+
+    def _to_db(self, domain_obj: D) -> T:
+        """Convert domain model to DB model."""
+        raise NotImplementedError("Must implement in subclass")
+    
+    def get_by_id(self, id: int) -> Optional[D]:
         """
         Retrieve a record by its ID.
         
@@ -34,20 +45,29 @@ class BaseRepository(Generic[T]):
             id: The record ID
             
         Returns:
-            The model instance if found, None otherwise
+            The domain model instance if found, None otherwise
         """
-        return self.session.query(self.model_class).filter(self.model_class.id == id).first()
-    
-    def get_all(self) -> List[T]:
+        try:
+            db_obj = self.session.query(self.model_class).filter(self.model_class.id == id).first()
+            return self._to_domain(db_obj) if db_obj else None
+        except SQLAlchemyError as e:
+            self.logger.error(f"Error retrieving {self.model_class.__name__} with id {id}: {str(e)}")
+            return None
+      
+    def get_all(self) -> List[D]:
         """
         Retrieve all records.
         
         Returns:
             List of all model instances
         """
-        return self.session.query(self.model_class).all()
+        try:
+            return [self._to_domain(obj) for obj in self.session.query(self.model_class).all()]
+        except SQLAlchemyError as e:
+            self.logger.error(f"Error retrieving all {self.model_class.__name__} records: {str(e)}")
+            return []
     
-    def find(self, **kwargs) -> List[T]:
+    def find(self, **kwargs) -> List[D]:
         """
         Find records matching the given criteria.
         
@@ -57,13 +77,18 @@ class BaseRepository(Generic[T]):
         Returns:
             List of matching model instances
         """
-        query = self.session.query(self.model_class)
-        for key, value in kwargs.items():
-            if hasattr(self.model_class, key):
-                query = query.filter(getattr(self.model_class, key) == value)
-        return query.all()
+        try:
+            query = self.session.query(self.model_class)
+            for key, value in kwargs.items():
+                if hasattr(self.model_class, key):
+                    query = query.filter(getattr(self.model_class, key) == value)
+            db_objects = query.all()
+            return [self._to_domain(obj) for obj in db_objects]
+        except SQLAlchemyError as e:
+            self.logger.error(f"Error finding {self.model_class.__name__} records: {str(e)}")
+            return []
     
-    def find_one(self, **kwargs) -> Optional[T]:
+    def find_one(self, **kwargs) -> Optional[D]:
         """
         Find a single record matching the given criteria.
         
@@ -73,50 +98,65 @@ class BaseRepository(Generic[T]):
         Returns:
             Matching model instance if found, None otherwise
         """
-        query = self.session.query(self.model_class)
-        for key, value in kwargs.items():
-            if hasattr(self.model_class, key):
-                query = query.filter(getattr(self.model_class, key) == value)
-        return query.first()
+        try:
+            query = self.session.query(self.model_class)
+            for key, value in kwargs.items():
+                if hasattr(self.model_class, key):
+                    query = query.filter(getattr(self.model_class, key) == value)
+            db_object = query.first()
+            return self._to_domain(db_object) if db_object else None
+        except SQLAlchemyError as e:
+            self.logger.error(f"Error finding {self.model_class.__name__} record: {str(e)}")
+            return None
     
-    def create(self, **kwargs) -> T:
+    def create(self, domain_obj: D) -> Optional[D]:
         """
         Create a new record.
         
         Args:
-            **kwargs: Field-value pairs for the new record
+            domain_obj: Field-value pairs for the new record
             
         Returns:
-            The created model instance
+            The created domain model instance or None if error
         """
-        instance = self.model_class(**kwargs)
-        self.session.add(instance)
-        self.session.commit()
-        self.session.refresh(instance)
-        return instance
+        try:
+            db_obj = self._to_db(domain_obj)
+            self.session.add(db_obj)
+            self.session.commit()
+            self.session.refresh(db_obj)
+            return self._to_domain(db_obj)
+        except SQLAlchemyError as e:
+            self.session.rollback()
+            self.logger.error(f"Error creating {self.model_class.__name__} record: {str(e)}")
+            return None
     
-    def update(self, id: int, **kwargs) -> Optional[T]:
+    def update(self, id: int, domain_obj: D) -> Optional[D]:
         """
         Update a record.
         
         Args:
             id: The record ID
-            **kwargs: Field-value pairs to update
+            domain_obj: Obj to update
             
         Returns:
             The updated model instance if found, None otherwise
         """
-        instance = self.get_by_id(id)
-        if instance is None:
+        try:
+            db_obj = self.session.query(self.model_class).filter(self.model_class.id == id).first()
+            if not db_obj:
+                return None
+                
+            for key, value in vars(domain_obj).items():
+                if hasattr(db_obj, key):
+                    setattr(db_obj, key, value)
+                    
+            self.session.commit()
+            self.session.refresh(db_obj)
+            return self._to_domain(db_obj)
+        except SQLAlchemyError as e:
+            self.session.rollback()
+            self.logger.error(f"Error updating {self.model_class.__name__} with id {id}: {str(e)}")
             return None
-        
-        for key, value in kwargs.items():
-            if hasattr(instance, key):
-                setattr(instance, key, value)
-        
-        self.session.commit()
-        self.session.refresh(instance)
-        return instance
     
     def delete(self, id: int) -> bool:
         """
@@ -126,35 +166,45 @@ class BaseRepository(Generic[T]):
             id: The record ID
             
         Returns:
-            True if deleted, False if not found
+            True if deleted, False if not found or error
         """
-        instance = self.get_by_id(id)
-        if instance is None:
+        try:
+            db_obj = self.session.query(self.model_class).filter(self.model_class.id == id).first()
+            if not db_obj:
+                return False
+                
+            self.session.delete(db_obj)
+            self.session.commit()
+            return True
+        except SQLAlchemyError as e:
+            self.session.rollback()
+            self.logger.error(f"Error deleting {self.model_class.__name__} with id {id}: {str(e)}")
             return False
-        
-        self.session.delete(instance)
-        self.session.commit()
-        return True
     
-    def bulk_create(self, items: List[Dict[str, Any]]) -> List[T]:
+    def bulk_create(self, items: List[D]) -> List[D]:
         """
         Create multiple records.
         
         Args:
-            items: List of field-value dictionaries
+            items: List of domain objects
             
         Returns:
             List of created model instances
         """
-        instances = [self.model_class(**item) for item in items]
-        self.session.add_all(instances)
-        self.session.commit()
-        
-        # Refresh all instances
-        for instance in instances:
-            self.session.refresh(instance)
-        
-        return instances
+        try:
+            db_instances = [self._to_db(item) for item in items]
+            self.session.add_all(db_instances)
+            self.session.commit()
+
+            # Refresh instances and return as domain models
+            for instance in db_instances:
+                self.session.refresh(instance)
+            
+            return [self._to_domain(instance) for instance in db_instances]
+        except SQLAlchemyError as e:
+            self.session.rollback()
+            self.logger.error(f"Error bulk creating {self.model_class.__name__} records: {str(e)}")
+            return []
     
     def count(self, **kwargs) -> int:
         """
@@ -166,8 +216,12 @@ class BaseRepository(Generic[T]):
         Returns:
             Count of matching records
         """
-        query = self.session.query(self.model_class)
-        for key, value in kwargs.items():
-            if hasattr(self.model_class, key):
-                query = query.filter(getattr(self.model_class, key) == value)
-        return query.count()
+        try:
+            query = self.session.query(self.model_class)
+            for key, value in kwargs.items():
+                if hasattr(self.model_class, key):
+                    query = query.filter(getattr(self.model_class, key) == value)
+            return query.count()
+        except SQLAlchemyError as e:
+            self.logger.error(f"Error counting {self.model_class.__name__} records: {str(e)}")
+            return 0

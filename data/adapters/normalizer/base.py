@@ -32,3 +32,16 @@ class Normalizer(ABC):
             Normalized data in standard format
         """
         pass
+
+    @abstractmethod   
+    def to_json(self, normalized_obj: Any) -> str:
+        """
+        Convert a normalized object (dataclass) to a JSON string.
+
+        Args:
+            normalized_obj: The normalized object (dataclass)
+
+        Returns:
+            JSON string representation of the object
+        """
+        pass

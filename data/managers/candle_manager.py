@@ -28,11 +28,11 @@ class CandleManager(BaseManager):
         Args:
             database : Database Instance
         """
-        self.producer_queue = QueueService()
-        self.consumer_queue = QueueService()
+        self.producer_candle_queue = QueueService()
+        self.producer_event_queue = QueueService()
+        self.consumer_candle_queue = QueueService()
         self.candle_consumer = CandleConsumer(database=database)
         #self.cache = cache
-        #self.event_bus = event_bus
         self.logger = logging.getLogger("CandleManager")
         
         # Keep track of normalizers by exchange
@@ -63,9 +63,9 @@ class CandleManager(BaseManager):
         self.logger.info("Candle Manager started successfully")
 
     async def _init_candle_producer(self):
-        self.producer_queue.declare_exchange(Exchanges.MARKET_DATA)
-        self.producer_queue.declare_queue(Queues.CANDLES)
-        self.producer_queue.bind_queue(
+        self.producer_candle_queue.declare_exchange(Exchanges.MARKET_DATA)
+        self.producer_candle_queue.declare_queue(Queues.CANDLES)
+        self.producer_candle_queue.bind_queue(
             exchange=Exchanges.MARKET_DATA,
             queue=Queues.CANDLES,
             routing_key=RoutingKeys.CANDLE_ALL
@@ -73,18 +73,28 @@ class CandleManager(BaseManager):
         self.logger.info("Initialised Candle Producer Queue")
     
     async def _init_candle_consumer(self):
-        self.consumer_queue.declare_exchange(Exchanges.MARKET_DATA)
-        self.consumer_queue.declare_queue(Queues.CANDLES)
-        self.consumer_queue.bind_queue(
+        self.consumer_candle_queue.declare_exchange(Exchanges.MARKET_DATA)
+        self.consumer_candle_queue.declare_queue(Queues.CANDLES)
+        self.consumer_candle_queue.bind_queue(
             exchange=Exchanges.MARKET_DATA,
             queue=Queues.CANDLES,
             routing_key=RoutingKeys.CANDLE_ALL
         )
-        self.consumer_queue.subscribe(
+        self.consumer_candle_queue.subscribe(
             queue=Queues.CANDLES,
             callback=self.on_candle
         )
         self.logger.info("Initialised Candle Consumer Queue")
+
+    async def _init_event_producer(self):
+        self.producer_event_queue.declare_exchange(Exchanges.MARKET_DATA)
+        self.producer_event_queue.declare_queue(Queues.EVENTS)
+        self.producer_event_queue.bind_queue(
+            exchange=Exchanges.MARKET_DATA,
+            queue=Queues.EVENTS,
+            routing_key=RoutingKeys.DATA_EVENT_HANDLE
+        )
+        self.logger.info("Initialised Event Producer Queue")
 
     def _get_websocket_normalizer(self, exchange: str) -> Normalizer:
         """
@@ -132,33 +142,42 @@ class CandleManager(BaseManager):
             normalizer = self._get_websocket_normalizer(exchange)
             
             # Normalize the data
-            normalized_data = await normalizer.normalize_websocket_data(data)
+            normalized_candle = await normalizer.normalize_websocket_data(data)
             
-            self.logger.info("Normalized data:" + str(normalized_data))
-            # Create a candle domain object
-            #candle = CandleData(**normalized_data)
-            candle = normalized_data
+            self.logger.info("Normalized Candle:" + str(normalized_candle))
+            
+            # Normalize the dataclass CandleData to JSON string
+            normalized_candle_json = normalizer.to_json(normalized_candle)
             # Cache key for this candle
             # cache_key = f"{exchange}:{symbol}:{interval}"
             
             if is_closed:
                 # Candle is closed - publish to the queue for processing
-                self.logger.info("Closed candle: {}, Symbol: {}, Timeframe: {}".format(candle["exchange"], candle["symbol"], candle["timeframe"]))
-                self.producer_queue.publish(exchange=Exchanges.MARKET_DATA, routing_key=RoutingKeys.CANDLE_ALL, message=candle)
-                self.logger.info("Yes pass")
+                self.logger.info("Closed candle: {}, Symbol: {}, Timeframe: {}".format(normalized_candle.exchange, normalized_candle.symbol, normalized_candle.timeframe))
+                self.producer_candle_queue.publish(exchange=Exchanges.MARKET_DATA, routing_key=RoutingKeys.CANDLE_ALL, message=normalized_candle_json)
+                self.logger.debug("Successfully published candle to candle producer queue")
                 # Remove from cache
                 #await self.cache.delete(cache_key)
+
+                # Normalize the dataclass event to JSON string
+                candle_event = normalizer.to_json(CandleClosedEvent(candle=normalized_candle))
                 
                 # Publish candle closed event
-                #await self.event_bus.publish(CandleClosedEvent(candle=candle), routing_key="event.data.candle")
+                self.producer_event_queue.publish(exchange=Exchanges.MARKET_DATA, routing_key=RoutingKeys.DATA_EVENT_HANDLE, message=candle_event)
+
+                self.logger.debug("Successfully published candle closed event to candle event queue")
             else:
                 # Candle is still open - update the cache
-                self.logger.debug(f"Updated open candle: {candle['timestamp']}, Open: {candle['open']}, Close: {candle['close']}")
+                self.logger.debug(f"Updated open candle: {normalized_candle.timestamp}, Open: {normalized_candle.open}, Close: {normalized_candle.close}")
                 #await self.cache.set(cache_key, candle)
                 
-                # Publish candle updated event
-                # await self.event_bus.publish(CandleUpdatedEvent(candle=candle), routing_key="event.data.candle")
+                # Normalize the dataclass event to JSON string
+                candle_event = normalizer.to_json(CandleUpdatedEvent(candle=normalized_candle))
                 
+                # Publish candle updated event
+                self.producer_event_queue.publish(exchange=Exchanges.MARKET_DATA, routing_key=RoutingKeys.DATA_EVENT_HANDLE, message=candle_event)
+                
+                self.logger.debug("Successfully published candle open event to candle event queue")
         except Exception as e:
             self.logger.error(f"Error handling WebSocket data: {e}")
             raise
@@ -188,16 +207,17 @@ class CandleManager(BaseManager):
                 # Normalize the data
                 normalized_candle : CandleData = await normalizer.normalize_rest_data(data=data, exchange=exchange, symbol=symbol, interval=interval)
                 
-                normalized_candle_json = json.dumps(asdict(normalized_candle), cls=DateTimeEncoder, default=str)
+                # Convert to json
+                normalized_candle_json = normalizer.to_json(normalized_candle)
                 
-                # Historical candles are always closed - publish to the queue
+                # Publish historical candle to the queue
                 self.logger.info(f"Historical candle: {normalized_candle.timestamp}, Symbol: {normalized_candle.symbol}, Timeframe: {normalized_candle.timeframe}")
 
-                self.producer_queue.publish(exchange=Exchanges.MARKET_DATA, routing_key=RoutingKeys.CANDLE_ALL, message=normalized_candle_json)
+                self.producer_candle_queue.publish(exchange=Exchanges.MARKET_DATA, routing_key=RoutingKeys.CANDLE_ALL, message=normalized_candle_json)
                 self.logger.info("Published Candle!")
                 
                 # Publish candle closed event
-                #await self.event_bus.publish(CandleClosedEvent(candle=normalized_candle), routing_key="event.data.candle")
+                #await self.producer_event_queue.publish(CandleClosedEvent(candle=normalized_candle), routing_key="event.data.candle")
 
                 normalized_data_list.append(normalized_candle)
             return normalized_data_list

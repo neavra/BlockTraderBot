@@ -1,5 +1,9 @@
+from dataclasses import asdict
 from datetime import datetime, timezone
+import json
 from typing import Dict, Any, List
+
+from utils.helper import DateTimeEncoder
 
 from ..base import Normalizer
 from domain.models.candle import CandleData
@@ -42,6 +46,7 @@ class BinanceRestNormalizer(Normalizer):
             print("error:",data)
             raise ValueError("Invalid Binance REST kline data format")
         
+        current_timestamp = datetime.now().timestamp() * 1000
         # Create a normalized candle representation
         normalized_data = CandleData(
             symbol=symbol.upper(),
@@ -53,8 +58,10 @@ class BinanceRestNormalizer(Normalizer):
             low=float(data[3]), 
             close=float(data[4]), 
             volume=float(data[5]),
-            is_closed=True, # REST API always returns completed candles
-            #raw_data=data # Store original data for reference
+            is_closed=data[6] < current_timestamp, # If less than current time then its closed
         )
         
         return normalized_data
+    
+    def to_json(self, normalized_candle : CandleData) -> str:
+        return json.dumps(asdict(normalized_candle), cls=DateTimeEncoder)

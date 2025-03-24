@@ -10,6 +10,7 @@ class Exchanges:
 class Queues:
     EXTERNAL_DATA = "external_data"
     CANDLES = "candles_data"
+    EVENTS = "data_events"
     SIGNALS = "strategy_signals"
     ORDERS = "execution_orders"
     SYSTEM_EVENTS = "system_events"
@@ -21,6 +22,7 @@ class RoutingKeys:
     EXTERNAL_NEW = "external.new.{exchange}.{symbol}.{timeframe}"
     CANDLE_NEW = "candle.new.{exchange}.{symbol}.{timeframe}"
     CANDLE_ALL = "candle.new.#"
+    DATA_EVENT_HANDLE = "data.event.#"
     
     # Strategy
     SIGNAL_ALL = "signal.#"

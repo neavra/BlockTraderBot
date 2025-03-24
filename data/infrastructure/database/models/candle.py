@@ -1,4 +1,5 @@
-from sqlalchemy import Column, String, Float, Integer, Index, UniqueConstraint
+from datetime import datetime
+from sqlalchemy import Column, String, Float, Integer, DECIMAL, TIMESTAMP, Boolean, Index, UniqueConstraint
 
 from ..base import BaseModel
 
@@ -9,24 +10,28 @@ class CandleModel(BaseModel):
     """
     
     __tablename__ = "candles"
+
+    # Primary Key
+    id = Column(Integer, primary_key=True, autoincrement=True)
     
     # Exchange and market information
-    exchange = Column(String(50), nullable=False, index=True)
-    symbol = Column(String(50), nullable=False, index=True)
-    timeframe = Column(String(20), nullable=False, index=True)
+    exchange = Column(String(20), nullable=False, index=True)
+    symbol = Column(String(20), nullable=False, index=True)
+    timeframe = Column(String(5), nullable=False, index=True)
     
     # Time
-    timestamp = Column(Integer, nullable=False, index=True)  # Unix timestamp in milliseconds
+    timestamp = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False, index=True)
     
     # OHLCV data
-    open = Column(Float, nullable=False)
-    high = Column(Float, nullable=False)
-    low = Column(Float, nullable=False)
-    close = Column(Float, nullable=False)
-    volume = Column(Float, nullable=False)
+    open = Column(DECIMAL(20, 8), nullable=False)
+    high = Column(DECIMAL(20, 8), nullable=False)
+    low = Column(DECIMAL(20, 8), nullable=False)
+    close = Column(DECIMAL(20, 8), nullable=False)
+    volume = Column(DECIMAL(20, 8), nullable=False)
     
     # Additional metadata
-    trades = Column(Integer, nullable=True)  # Number of trades, if available
+    is_closed = Column(Boolean, nullable=False)
+    # trades = Column(Integer, nullable=True)  # Number of trades, if available
     
     # Indexes and constraints
     __table_args__ = (
