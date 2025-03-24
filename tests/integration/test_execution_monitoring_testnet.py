@@ -67,14 +67,17 @@ async def run_real_world_test():
             return False
         
         # Create queue services for communication
-        execution_queue = QueueService()
-        monitoring_queue = QueueService()
+        execution_consumer_queue = QueueService()
+        execution_producer_queue = QueueService()
+
+        monitoring_consumer_queue = QueueService()
+        monitoring_producer_queue = QueueService()
         
         # Initialize execution service
         execution_service = ExecutionService(
             exchange=exchange,
-            consumer_queue=execution_queue,
-            producer_queue=execution_queue,
+            consumer_queue=execution_consumer_queue,
+            producer_queue=execution_producer_queue,
             cache_service=cache_service,
             config=config
         )
@@ -82,8 +85,8 @@ async def run_real_world_test():
         # Initialize monitoring service
         monitoring_service = MonitoringService(
             exchange=exchange,
-            consumer_queue=monitoring_queue,
-            producer_queue=monitoring_queue,
+            consumer_queue=monitoring_consumer_queue,
+            producer_queue=monitoring_producer_queue,
             cache_service=cache_service,
             config=config
         )
@@ -96,7 +99,7 @@ async def run_real_world_test():
         # Create a test signal
         test_signal = {
             "id": f"test_signal_{int(datetime.now().timestamp())}",
-            "symbol": "BTC-USD",  # Adjust to match your exchange's available symbols
+            "symbol": "BTC/USDC:USDC",  # Adjust to match your exchange's available symbols
             "direction": "long",
             "signal_type": "entry",
             "price_target": 60000.00,  # Set a price far from market to avoid fill
@@ -184,11 +187,15 @@ async def run_real_world_test():
         logger.info("Check your Telegram for order placement and cancellation notifications")
         
         # Clean up
+        execution_producer_queue.stop()
+        execution_consumer_queue.stop()
+        monitoring_producer_queue.stop()
+        monitoring_consumer_queue.stop()
+        cache_service.close()
+
         await execution_service.stop()
         await monitoring_service.stop()
-        execution_queue.stop()
-        monitoring_queue.stop()
-        cache_service.close()
+        
         
         return True
         
