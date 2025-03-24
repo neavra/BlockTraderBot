@@ -33,6 +33,7 @@ class RoutingKeys:
     ORDER_NEW = "order.new.{exchange}.{symbol}"
     ORDER_CANCELLED = "order.cancelled.{exchange}.{symbol}"
     ORDER_FAILED = "order.failed.{exchange}.{symbol}"
+    ORDER_ALL = "order.#"
     
     # System
     SYSTEM_ALERT = "system.alert"

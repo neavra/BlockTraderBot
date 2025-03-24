@@ -216,7 +216,7 @@ class MonitoringService:
         self.consumer_queue.bind_queue(
             Exchanges.EXECUTION,
             Queues.ORDERS,
-            RoutingKeys.ORDER_NEW
+            RoutingKeys.ORDER_ALL
         )
 
         # Subscribe to the queue with a callback

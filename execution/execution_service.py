@@ -597,13 +597,6 @@ class ExecutionService:
             else:
                 routing_key = f"order.{event_type}.{self.exchange.id}.{order.symbol}"
             
-            # Format the routing key if needed
-            if '{exchange}' in routing_key:
-                routing_key = routing_key.format(
-                    exchange=self.exchange.id,
-                    symbol=order.symbol
-                )
-            
             # Publish to the execution exchange
             self.producer_queue.publish(
                 Exchanges.EXECUTION,

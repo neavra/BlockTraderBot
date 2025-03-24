@@ -131,23 +131,6 @@ async def run_real_world_test():
         order_id = order_result['id']
         logger.info(f"Order successfully placed with ID: {order_id}")
         
-        # Create the order event manually
-        order_event = {
-            'type': 'created',
-            'order_id': order_id,
-            'symbol': order_params['symbol'],
-            'side': order_params['side'],
-            'order_type': order_params['type'],
-            'price': order_params['price'],
-            'size': order_params['amount'],
-            'status': 'open',
-            'timestamp': datetime.now().isoformat()
-        }
-        
-        # Manually send the event to the monitoring service
-        logger.info("Forwarding order event to monitoring service")
-        monitoring_service.on_event(order_event)
-        
         # Wait a bit for processing and to see Telegram notification
         logger.info("Waiting 5 seconds for Telegram notification to be sent...")
         await asyncio.sleep(5)
@@ -162,22 +145,6 @@ async def run_real_world_test():
         
         logger.info(f"Order successfully cancelled: {cancel_result}")
         
-        # Create cancellation event manually
-        cancel_event = {
-            'type': 'cancelled',
-            'order_id': order_id,
-            'symbol': order_params['symbol'],
-            'side': order_params['side'],
-            'order_type': order_params['type'],
-            'price': order_params['price'],
-            'size': order_params['amount'],
-            'status': 'cancelled',
-            'timestamp': datetime.now().isoformat()
-        }
-        
-        # Send cancellation event to monitoring service
-        logger.info("Forwarding cancellation event to monitoring service")
-        monitoring_service.on_event(cancel_event)
         
         # Wait a bit for processing and to see Telegram notification
         logger.info("Waiting 5 seconds for Telegram notification to be sent...")
