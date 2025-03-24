@@ -39,5 +39,12 @@ A bot that is used to trade order blocks automatically
 
     ```bash
     cd data
-    python3 data_ingestion.py
+    python3 main.py
+    ```
+
+6. **Run Tests:** Run the unit & integration tests for the Data Layer
+
+    ```bash
+    cd data
+    pytest tests/
     ```
