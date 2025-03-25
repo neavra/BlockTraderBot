@@ -1,5 +1,6 @@
 import asyncio
 from dataclasses import asdict
+import json
 import logging
 import signal
 import sys
@@ -7,16 +8,13 @@ import os
 import time
 from typing import List, Dict, Any
 
-from config.settings import SYMBOLS, TIMEFRAMES, EXCHANGES, config
-from config.logging import setup_logging
+from data.logs.logging import setup_logging
+from config.config_loader import load_config
 from connectors.rest.binance_rest import BinanceRestClient
 from infrastructure.database.db import Database
 from managers.candle_manager import CandleManager
 from connectors.websocket.factory import WebSocketClientFactory
 from connectors.rest.factory import RestClientFactory
-from services.handlers.market_data_handler import MarketDataHandler
-from services.consumer.candle_consumer import CandleConsumer
-from shared.queue.queue_service import QueueService
 from utils.concurrency import gather_with_concurrency
 
 from dotenv import load_dotenv
@@ -33,6 +31,10 @@ class TradingBotDataLayer:
         setup_logging()
         self.logger = logging.getLogger("TradingBotDataLayer")
         self.logger.info("Initializing Trading Bot Data Layer")
+
+        # Intialise Config:
+        self.config = load_config()
+        self.logger.info("Configurations initialised")
         
         # Signal handling for graceful shutdown
         #self._setup_signal_handlers()
@@ -42,7 +44,7 @@ class TradingBotDataLayer:
         self.tasks = []
         
         # Initialise Database
-        self.database = Database(db_url=config.DATABASE_URL)
+        self.database = Database(db_url=self.config["data"]["database"]["database_url"])
         
         # Initialize manager
         self.candle_manager = CandleManager(database=self.database)
@@ -96,29 +98,37 @@ class TradingBotDataLayer:
         """Initialize WebSocket and REST clients for all exchanges, symbols, and timeframes."""
         self.logger.info("Initializing market data clients...")
         
-        for exchange in EXCHANGES:
-            exchange_name = exchange['name'].lower()
-            exchange_symbols = exchange.get('symbols', SYMBOLS)
-            exchange_timeframes = exchange.get('timeframes', TIMEFRAMES)
+        for exchange_name, exchange_data in self.config['data'].items():
+            # Skip if the exchange is not a dictionary or is empty
+            if not isinstance(exchange_data, dict):
+                continue
             
-            for symbol in exchange_symbols:
-                for timeframe in exchange_timeframes:
-                    # Create WebSocket client
-                    ws_client = self.ws_factory.create(
-                        exchange=exchange_name,
-                        symbol=symbol,
-                        interval=timeframe,
-                        manager=self.candle_manager
-                    )
-                    self.websocket_clients.append(ws_client)
-                    
-                    # Create REST client (for historical data)
-                    rest_client = self.rest_factory.create(
-                        exchange=exchange_name,
-                        symbol=symbol,
-                        interval=timeframe
-                    )
-                    self.rest_clients.append(rest_client)
+            # Check for symbols
+            symbols = exchange_data.get('symbols', {})
+            if symbols:
+                for symbol, sym_is_active in symbols.items():
+                    if sym_is_active:
+                        # Check for timeframes
+                        timeframes = exchange_data.get('timeframes', {})
+                        if timeframes:
+                            for timeframe, tf_is_active in timeframes.items():
+                                if tf_is_active:
+                                    # Create WebSocket client
+                                    ws_client = self.ws_factory.create(
+                                        exchange=exchange_name,
+                                        symbol=symbol,
+                                        interval=timeframe,
+                                        manager=self.candle_manager
+                                    )
+                                    self.websocket_clients.append(ws_client)
+                                    
+                                    # Create REST client (for historical data)
+                                    rest_client = self.rest_factory.create(
+                                        exchange=exchange_name,
+                                        symbol=symbol,
+                                        interval=timeframe
+                                    )
+                                    self.rest_clients.append(rest_client)
 
     async def start(self):
         """Start the application and all its components."""

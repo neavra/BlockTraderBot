@@ -18,6 +18,11 @@ A bot that is used to trade order blocks automatically
         POSTGRES_USER=user
         POSTGRES_PASSWORD=f994e125a74c839586f7172d0065bbed5e617433ce19ef27ae9bcb701cff9667
         POSTGRES_DB=blocktraderbot
+
+        REDIS_URL="redis://localhost:6379"
+        REDIS_PASSWORD=""
+        
+        EVENT_BUS_URL="amqp://guest:guest@localhost:5672/"
         ```
 
 3. **Install Dependencies (with virtual env setup):**

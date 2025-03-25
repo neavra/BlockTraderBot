@@ -33,6 +33,16 @@ def load_config():
     
     if 'hyperliquid' not in config['exchanges']:
         config['exchanges']['hyperliquid'] = {}
+
+    if 'database' not in config['data']:
+        config['data']['database'] = {}
+    
+    if 'cache' not in config['data']:
+        config['data']['cache'] = {}
+
+    if 'queue' not in config['data']:
+        config['data']['queue'] = {}
+
     
     # Add sensitive credentials from environment variables
     config['exchanges']['hyperliquid'].update({
@@ -42,6 +52,19 @@ def load_config():
     config['monitoring']['telegram'].update({
         'bot_token': os.getenv('BOT_TOKEN', ''),
         'chat_id': os.getenv('CHAT_ID', '')
+    })
+    config['data']['database'].update({
+        'database_url' : os.environ.get("DATABASE_URL", ""),
+        'postgres_user': os.environ.get("POSTGRES_USER", ""),
+        'postgres_password' : os.environ.get("POSTGRES_PASSWORD", ""),
+        'postgres_db' : os.environ.get("POSTGRES_DB", "")
+    })
+    config['data']['cache'].update({
+        'redis_url' : os.environ.get("REDIS_URL", ""),
+        'redis_password': os.environ.get("REDIS_PASSWORD", ""),
+    })
+    config['data']['queue'].update({
+        'event_bus_url' : os.environ.get("EVENT_BUS_URL", ""),
     })
     
     return config

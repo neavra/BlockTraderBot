@@ -20,7 +20,7 @@ LOGGING_CONFIG = {
         "file": {
             "level": "INFO",
             "class": "logging.FileHandler",
-            "filename": "trading_bot.log",
+            "filename": "logs/trading_bot.log",
             "formatter": "standard",
         },
     },

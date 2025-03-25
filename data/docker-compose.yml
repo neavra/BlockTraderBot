@@ -31,7 +31,7 @@ services:
     image: redis:7-alpine
     container_name: redis-data-layer
     restart: always
-    command: redis-server --requirepass ${REDIS_PASSWORD:-}
+    command: redis-server
     volumes:
       - cache:/data
     ports:
