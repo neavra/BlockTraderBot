@@ -154,7 +154,7 @@ class TradingBotDataLayer:
         
         # Initial historical data load - fetch recent candles to start
         historical_tasks = [
-            asyncio.create_task(self.fetch_initial_history(rest_client=client, lookback_period=1)) #720
+            asyncio.create_task(self.fetch_initial_history(rest_client=client, lookback_period=self.config['data']['lookback'])) #720
             for client in self.rest_clients
         ]
         # Run historical tasks with concurrency limit to avoid overwhelming exchanges

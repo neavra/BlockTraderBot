@@ -20,6 +20,7 @@
       }
     },  
     "data":{
+      "lookback" : 24,
       "binance":{
         "symbols": {
           "BTCUSDT": true, 

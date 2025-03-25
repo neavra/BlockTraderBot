@@ -150,7 +150,7 @@ class CandleManager(BaseManager):
             # Normalize the dataclass CandleData to JSON string
             normalized_candle_json = normalizer.to_json(normalized_candle)
             # Cache key for this candle
-            cache_key = f"{normalized_candle.exchange}:{normalized_candle.symbol}:{normalized_candle.timeframe}"
+            cache_key = f"{normalized_candle.exchange}:{normalized_candle.symbol}:{normalized_candle.timeframe}:{normalized_candle.timestamp}"
             
             if is_closed:
                 # Candle is closed - publish to the queue for processing
@@ -158,9 +158,9 @@ class CandleManager(BaseManager):
                 self.producer_candle_queue.publish(exchange=Exchanges.MARKET_DATA, routing_key=RoutingKeys.CANDLE_ALL, message=normalized_candle_json)
                 self.logger.debug("Successfully published candle to candle producer queue")
                 
-                # Remove from cache
-                self.candle_cache.delete(cache_key)
-                self.logger.debug("Successfully deleted closed candle from cache")
+                # Add to cache
+                self.candle_cache.set(cache_key, normalized_candle_json)
+                self.logger.debug("Successfully stored closed candle to cache")
 
                 # Normalize the dataclass event to JSON string
                 candle_event = normalizer.to_json(CandleClosedEvent(candle=normalized_candle))
@@ -170,11 +170,11 @@ class CandleManager(BaseManager):
 
                 self.logger.debug("Successfully published candle closed event to candle event queue")
             else:
-                # Candle is still open - update the cache
+                # Candle is still open 
                 self.logger.debug(f"Updated open candle: {normalized_candle.timestamp}, Open: {normalized_candle.open}, Close: {normalized_candle.close}")
                 
-                self.candle_cache.set(cache_key, normalized_candle_json)
-                self.logger.debug("Successfully added open candle in cache")
+                # self.candle_cache.set(cache_key, normalized_candle_json)
+                # self.logger.debug("Successfully added open candle in cache")
                 
                 # Normalize the dataclass event to JSON string
                 candle_event = normalizer.to_json(CandleUpdatedEvent(candle=normalized_candle))
@@ -214,9 +214,15 @@ class CandleManager(BaseManager):
                 
                 # Convert to json
                 normalized_candle_json = normalizer.to_json(normalized_candle)
+
+                # Cache key for this candle
+                cache_key = f"{normalized_candle.exchange}:{normalized_candle.symbol}:{normalized_candle.timeframe}:{normalized_candle.timestamp}"
                 
-                # Publish historical candle to the queue
+                # Store historical candle in the cache publish to the queue
                 self.logger.info(f"Historical candle: {normalized_candle.timestamp}, Symbol: {normalized_candle.symbol}, Timeframe: {normalized_candle.timeframe}")
+
+                self.candle_cache.set(cache_key, normalized_candle_json)
+                self.logger.debug("Successfully stored historical candle to cache")
 
                 self.producer_candle_queue.publish(exchange=Exchanges.MARKET_DATA, routing_key=RoutingKeys.CANDLE_ALL, message=normalized_candle_json)
                 self.logger.info("Published Candle!")
