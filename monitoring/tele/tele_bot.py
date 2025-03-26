@@ -3,7 +3,7 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler
 
-from shared.dto.alert import Alert
+from shared.domain.dto.alert import Alert
 
 # Set up logging
 logging.basicConfig(

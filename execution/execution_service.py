@@ -8,7 +8,7 @@ from shared.cache.cache_service import CacheService
 
 from execution.exchange.exchange_interface import ExchangeInterface
 from shared.constants import Exchanges, Queues, RoutingKeys, CacheKeys, CacheTTL
-from shared.dto.order import Order
+from shared.domain.dto.order import Order
 
 
 logger = logging.getLogger(__name__)

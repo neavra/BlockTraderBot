@@ -7,7 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from ..models.candle import CandleModel
 from .base_repository import BaseRepository
-from domain.models.candle import CandleData
+from shared.domain.models.candle import CandleData
 
 
 class CandleRepository(BaseRepository[CandleModel]):

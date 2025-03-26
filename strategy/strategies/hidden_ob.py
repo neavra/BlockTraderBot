@@ -2,7 +2,7 @@
 from typing import Dict, Any, Optional
 from strategy.strategies.base import Strategy
 from strategy.indicators.base import Indicator
-from shared.dto.signal import Signal
+from shared.domain.dto.signal import Signal
 
 class HiddenOrderBlockStrategy(Strategy):
     """

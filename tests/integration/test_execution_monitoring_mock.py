@@ -19,8 +19,8 @@ from config.config_loader import load_config
 from shared.queue.queue_service import QueueService
 from shared.cache.cache_service import CacheService
 from shared.constants import Exchanges, Queues, RoutingKeys
-from shared.dto.alert import Alert, AlertType
-from shared.dto.order import Order
+from shared.domain.dto.alert import Alert, AlertType
+from shared.domain.dto.order import Order
 
 # Execution layer imports
 from execution.exchange.hyperliquid import HyperliquidExchange

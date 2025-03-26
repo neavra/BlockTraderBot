@@ -9,11 +9,11 @@ from monitoring.tele.tele_bot import TeleBot
 from monitoring.order.order_manager import OrderManager
 from monitoring.position.position_manager import PositionManager
 from monitoring.alert.alert_manager import AlertManager, TelegramAlertProvider
-from shared.dto.alert import Alert, AlertType
+from shared.domain.dto.alert import Alert, AlertType
 from shared.queue.queue_service import QueueService
 from shared.cache.cache_service import CacheService
 from shared.constants import Exchanges, Queues, RoutingKeys
-from shared.dto.order import Order
+from shared.domain.dto.order import Order
 
 from execution.exchange.exchange_interface import ExchangeInterface
 

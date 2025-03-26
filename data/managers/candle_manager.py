@@ -13,9 +13,9 @@ from shared.constants import Exchanges, Queues, RoutingKeys
 from shared.queue.queue_service import QueueService
 
 from .base import BaseManager
-from domain.models.candle import CandleData
+from shared.domain.models.candle import CandleData
 from adapters.normalizer.factory import NormalizerFactory
-from domain.events.market_events import CandleClosedEvent, CandleUpdatedEvent
+from shared.domain.events.market_events import CandleClosedEvent, CandleUpdatedEvent
 
 class CandleManager(BaseManager):
     """

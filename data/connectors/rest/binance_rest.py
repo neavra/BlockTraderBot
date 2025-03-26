@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from managers.candle_manager import CandleManager
 
 from .base import RestClient
-from domain.models.candle import CandleData
+from shared.domain.models.candle import CandleData
 
 class BinanceRestClient(RestClient):
     """

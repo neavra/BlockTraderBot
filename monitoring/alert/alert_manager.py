@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
 
-from shared.dto.alert import Alert
+from shared.domain.dto.alert import Alert
 from monitoring.tele.tele_bot import TeleBot
 
 logger = logging.getLogger(__name__)

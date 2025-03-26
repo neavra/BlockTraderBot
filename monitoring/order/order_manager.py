@@ -1,5 +1,5 @@
 from typing import List, Dict, Any, Optional
-from shared.dto.order import Order
+from shared.domain.dto.order import Order
 
 class OrderManager:
     """Placeholder for order management functionality"""

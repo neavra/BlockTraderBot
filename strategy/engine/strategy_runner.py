@@ -6,7 +6,7 @@ from typing import Dict, Any, List
 from datetime import datetime
 
 from strategy.strategies.base import Strategy
-from shared.dto.signal import Signal
+from shared.domain.dto.signal import Signal
 from shared.queue.queue_service import QueueService
 from shared.cache.cache_service import CacheService
 from shared.constants import Exchanges, Queues, RoutingKeys, CacheKeys, CacheTTL

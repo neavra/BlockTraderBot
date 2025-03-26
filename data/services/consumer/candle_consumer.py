@@ -6,7 +6,7 @@ import logging
 from typing import Any
 import uuid
 
-from domain.models.candle import CandleData
+from shared.domain.models.candle import CandleData
 from infrastructure.database.repository.candle_repository import CandleRepository
 from infrastructure.database.db import Database
 from utils.error_handling import retry #, handle_exceptions
