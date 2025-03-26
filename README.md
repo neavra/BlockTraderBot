@@ -13,7 +13,7 @@ A bot that is used to trade order blocks automatically
     - **(.env):** In the root directory, create a `.env` file with the following variables:
 
         ```env
-        DATABASE_URL="postgresql://user:f994e125a74c839586f7172d0065bbed5e617433ce19ef27ae9bcb701cff9667@localhost:5432/blocktraderbot?schema=public"
+        DATABASE_URL="postgresql://user:f994e125a74c839586f7172d0065bbed5e617433ce19ef27ae9bcb701cff9667@localhost:5432/blocktraderbot"
 
         POSTGRES_USER=user
         POSTGRES_PASSWORD=f994e125a74c839586f7172d0065bbed5e617433ce19ef27ae9bcb701cff9667
