@@ -40,6 +40,7 @@ class CandleManager(BaseManager):
         self.websocket_normalizers = {}
         self.rest_normalizers = {}
 
+        self.event_tasks = set()
         self.running = False # Not active yet
         self.main_loop = None
     
@@ -62,6 +63,53 @@ class CandleManager(BaseManager):
         self.running = True
 
         self.logger.info("Candle Manager started successfully")
+
+    async def stop(self):
+        """Stop the candle manager and clean up resources."""
+        if not self.running:
+            self.logger.warning("Candle Manager is not running")
+            return
+            
+        self.logger.info("Stopping Candle Manager...")
+        self.running = False
+        
+        # Cancel all pending tasks
+        tasks_to_cancel = list(self.event_tasks)
+        for task in tasks_to_cancel:
+            if not task.done() and not task.cancelled():
+                task.cancel()
+        
+        # Wait for tasks with a timeout
+        if tasks_to_cancel:
+            try:
+                # Wait up to 3 seconds for tasks to finish
+                await asyncio.sleep(3)
+                
+                # Log any tasks that didn't complete
+                for task in self.event_tasks:
+                    if not task.done():
+                        self.logger.warning(f"Task didn't complete during shutdown: {task}")
+            except Exception as e:
+                self.logger.error(f"Error waiting for candle manager tasks to complete: {e}")
+        
+        # Close any client resources
+        if self.producer_candle_queue:
+            self.producer_candle_queue.stop()
+        
+        if self.producer_event_queue:
+            self.producer_event_queue.stop()
+        
+        if self.consumer_candle_queue:
+            self.consumer_candle_queue.stop()
+        
+        if self.candle_cache:
+            self.candle_cache.close()
+        
+        # Stop candle consumer if it has a stop method
+        if hasattr(self.candle_consumer, 'stop'):
+            await self.candle_consumer.stop()
+        
+        self.logger.info(f"Candle manager stopped, cleaned up {len(tasks_to_cancel)} tasks")
 
     async def _init_candle_producer(self):
         self.producer_candle_queue.declare_exchange(Exchanges.MARKET_DATA)
@@ -244,10 +292,17 @@ class CandleManager(BaseManager):
         try:
             # Use run_coroutine_threadsafe to schedule the async task from this thread
             # This requires having a reference to the main event loop
-            asyncio.run_coroutine_threadsafe(
+            task = asyncio.run_coroutine_threadsafe(
                 self._process_event_async(candle), 
                 self.main_loop  # You need to store the main loop as an instance variable
             )
+
+            # Track the task future
+            self.event_tasks.add(task)
+
+            def _remove_task(future):
+                self.event_tasks.discard(future)
+            task.add_done_callback(_remove_task)
         except Exception as e:
             self.logger.error(f"Error scheduling candle processing: {str(e)}")
     
@@ -260,5 +315,9 @@ class CandleManager(BaseManager):
                 await self.candle_consumer.process_item(candle=candledata)
                 self.logger.info(f"Candle consumed by consumer: {candledata}")
 
+        except asyncio.CancelledError:
+            # Handle cancellation gracefully
+            self.logger.debug("Candle processing was cancelled")
+            raise  # Re-raise to properly propagate cancellation
         except Exception as e:
             self.logger.error(f"Async processing error: {str(e)}")

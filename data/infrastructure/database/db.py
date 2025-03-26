@@ -1,5 +1,6 @@
 from typing import Generator, Any
 from contextlib import contextmanager
+import logging
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
@@ -34,7 +35,31 @@ class Database:
             autoflush=False,
             bind=self.engine
         )
+        self.logger = logging.getLogger("Database")
     
+    async def disconnect(self) -> None:
+        """
+        Disconnect from the database and clean up all connections.
+        This should be called when shutting down the service to ensure
+        all database resources are properly released.
+        """
+        try:
+            if self.engine:
+                # Dispose of the engine to close all connections in the pool
+                self.engine.dispose()
+                self.logger.info("Database engine disposed, all connections closed")
+            else:
+                self.logger.warning("No database engine to dispose")
+        except Exception as e:
+            self.logger.error(f"Error while disconnecting from database: {e}", exc_info=True)
+            # We don't re-raise the exception here to ensure shutdown continues
+            # even if there's an issue with database cleanup
+        finally:
+            # Reset attributes to ensure we don't use them after disconnect
+            self.engine = None
+            self.SessionLocal = None
+            self.logger.info("Database disconnect completed")
+            
     def create_tables(self) -> None:
         """Create all tables defined in the models."""
         Base.metadata.create_all(bind=self.engine)
