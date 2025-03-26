@@ -4,9 +4,8 @@ import logging
 from typing import Dict, Any, List, Optional
 from dataclasses import asdict
 
-from adapters.normalizer.base import Normalizer
+from normalizer.base import Normalizer
 from shared.cache.cache_service import CacheService
-from utils.helper import DateTimeEncoder
 from infrastructure.database.db import Database
 from services.consumer.candle_consumer import CandleConsumer
 from shared.constants import Exchanges, Queues, RoutingKeys
@@ -14,7 +13,7 @@ from shared.queue.queue_service import QueueService
 
 from .base import BaseManager
 from shared.domain.models.candle import CandleData
-from adapters.normalizer.factory import NormalizerFactory
+from normalizer.factory import NormalizerFactory
 from shared.domain.events.market_events import CandleClosedEvent, CandleUpdatedEvent
 
 class CandleManager(BaseManager):
