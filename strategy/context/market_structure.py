@@ -1,388 +1,357 @@
-# strategy/context/market_structure.py
-from typing import Dict, List, Any, Optional, Tuple
-from dataclasses import dataclass
-from enum import Enum
 import logging
+from typing import Dict, List, Any, Optional
+from enum import Enum
+from dataclasses import dataclass
 import time
 from datetime import datetime
 
-from strategy.context.trend_analysis import TrendAnalyzer, TrendDirection
-from strategy.context.swing_detector import SwingDetector
-from strategy.context.levels import SupportResistanceDetector
-
 logger = logging.getLogger(__name__)
+
+class TrendDirection(Enum):
+    UP = "uptrend"
+    DOWN = "downtrend"
+    NEUTRAL = "neutral"
+    UNKNOWN = "unknown"
 
 @dataclass
 class SwingPoint:
-    """Represents a significant swing point in the market"""
+    """Represents a swing high or low point in the market"""
     price: float
     timestamp: str
-    type: str  # "high" or "low"
-    index: int  # Index in the candle array
-    broken: bool = False
+    index: int       # Index in the candle array
+    type: str        # "high" or "low"
     strength: float = 1.0  # 0.0 to 1.0
 
-@dataclass
-class TrendState:
-    """Represents the current trend state"""
-    direction: TrendDirection = TrendDirection.UNKNOWN
-    strength: float = 0.0  # 0.0 to 1.0
-    swing_high: Optional[SwingPoint] = None
-    swing_low: Optional[SwingPoint] = None
-    last_break: Optional[Dict[str, Any]] = None
 
-@dataclass
-class MarketState:
-    """Represents the complete state of the market"""
-    symbol: str
-    timeframe: str
-    timestamp: str
-    trend: TrendState
-    swings: Dict[str, List[SwingPoint]]
-    levels: Dict[str, List[Dict[str, Any]]]
-    structure_breaks: List[Dict[str, Any]]
-    last_updated: float  # Unix timestamp
+class MarketContext:
+    """
+    Simplified market context object that tracks key market structure elements:
+    - Swing highs and lows
+    - Trend direction
+    - Fibonacci levels
+    """
+    
+    def __init__(self, symbol: str, timeframe: str):
+        """
+        Initialize market context
+        
+        Args:
+            symbol: Trading pair
+            timeframe: Candle timeframe
+        """
+        self.symbol = symbol
+        self.timeframe = timeframe
+        self.timestamp = None
+        self.current_price = None
+        
+        # Swing points
+        self.swing_high = None
+        self.swing_low = None
+        self.swing_high_history = []
+        self.swing_low_history = []
+        
+        # Trend information
+        self.trend = TrendDirection.UNKNOWN.value
+        
+        # Fibonacci levels
+        self.fib_levels = {
+            'support': [],
+            'resistance': []
+        }
+        
+        # Metadata
+        self.last_updated = time.time()
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Convert market context to dictionary
+        
+        Returns:
+            Dictionary representation of market context
+        """
+        return {
+            'symbol': self.symbol,
+            'timeframe': self.timeframe,
+            'timestamp': self.timestamp,
+            'current_price': self.current_price,
+            'swing_high': self._swing_point_to_dict(self.swing_high),
+            'swing_low': self._swing_point_to_dict(self.swing_low),
+            'swing_high_history': [self._swing_point_to_dict(p) for p in self.swing_high_history],
+            'swing_low_history': [self._swing_point_to_dict(p) for p in self.swing_low_history],
+            'trend': self.trend,
+            'fib_levels': self.fib_levels,
+            'last_updated': self.last_updated
+        }
+    
+    def _swing_point_to_dict(self, point: SwingPoint) -> Optional[Dict[str, Any]]:
+        """Convert SwingPoint to dictionary"""
+        if point is None:
+            return None
+        return {
+            'price': point.price,
+            'timestamp': point.timestamp,
+            'index': point.index,
+            'type': point.type,
+            'strength': point.strength
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'MarketContext':
+        """
+        Create MarketContext from dictionary
+        
+        Args:
+            data: Dictionary representation of market context
+            
+        Returns:
+            MarketContext object
+        """
+        context = cls(data['symbol'], data['timeframe'])
+        context.timestamp = data.get('timestamp')
+        context.current_price = data.get('current_price')
+        
+        # Convert swing point dictionaries to SwingPoint objects
+        swing_high_dict = data.get('swing_high')
+        if swing_high_dict:
+            context.swing_high = SwingPoint(
+                price=swing_high_dict['price'],
+                timestamp=swing_high_dict['timestamp'],
+                index=swing_high_dict['index'],
+                type=swing_high_dict['type'],
+                strength=swing_high_dict.get('strength', 1.0)
+            )
+        
+        swing_low_dict = data.get('swing_low')
+        if swing_low_dict:
+            context.swing_low = SwingPoint(
+                price=swing_low_dict['price'],
+                timestamp=swing_low_dict['timestamp'],
+                index=swing_low_dict['index'],
+                type=swing_low_dict['type'],
+                strength=swing_low_dict.get('strength', 1.0)
+            )
+        
+        # Convert swing history
+        swing_high_history = data.get('swing_high_history', [])
+        context.swing_high_history = [
+            SwingPoint(
+                price=h['price'],
+                timestamp=h['timestamp'],
+                index=h['index'],
+                type=h['type'],
+                strength=h.get('strength', 1.0)
+            ) for h in swing_high_history if h is not None
+        ]
+        
+        swing_low_history = data.get('swing_low_history', [])
+        context.swing_low_history = [
+            SwingPoint(
+                price=l['price'],
+                timestamp=l['timestamp'],
+                index=l['index'],
+                type=l['type'],
+                strength=l.get('strength', 1.0)
+            ) for l in swing_low_history if l is not None
+        ]
+        
+        # Set other fields
+        context.trend = data.get('trend', TrendDirection.UNKNOWN.value)
+        context.fib_levels = data.get('fib_levels', {'support': [], 'resistance': []})
+        context.last_updated = data.get('last_updated', time.time())
+        
+        return context
+
 
 class MarketStructure:
     """
-    Main class for tracking and analyzing market structure across timeframes
+    Manages market structure objects for different symbols and timeframes
     """
     
-    def __init__(self, params: Dict[str, Any] = None):
+    def __init__(self):
+        """Initialize the market structure manager"""
+        # Dictionary to store market contexts by symbol and timeframe
+        self.contexts = {}
+        
+        # Initialize analyzers
+        self.swing_detector = None
+        self.trend_analyzer = None
+        self.fib_detector = None
+    
+    def set_analyzers(self, swing_detector, trend_analyzer, fib_detector):
         """
-        Initialize the market structure analyzer
+        Set the analyzers to use for market structure updates
         
         Args:
-            params: Configuration parameters
+            swing_detector: Swing detector implementation
+            trend_analyzer: Trend analyzer implementation
+            fib_detector: Fibonacci level detector implementation
         """
-        default_params = {
-            'swing_detection': {
-                'method': 'zigzag',
-                'lookback': 5,
-                'threshold': 0.5,  # % change
-                'min_swing_separation': 3
-            },
-            'trend_analysis': {
-                'method': 'swing',
-                'lookback': 4,
-                'threshold': 1.0,  # % threshold for trend changes
-            },
-            'level_detection': {
-                'method': 'all',
-                'num_levels': 5,
-                'threshold': 0.3,
-                'zone_size': 0.2
-            }
-        }
-        
-        if params:
-            # Deep merge params
-            for section, values in params.items():
-                if section in default_params and isinstance(values, dict):
-                    default_params[section].update(values)
-                else:
-                    default_params[section] = values
-        
-        self.params = default_params
-        
-        # Initialize component analyzers
-        self.swing_detector = SwingDetector(self.params.get('swing_detection', {}))
-        self.trend_analyzer = TrendAnalyzer(self.params.get('trend_analysis', {}))
-        self.level_detector = SupportResistanceDetector(self.params.get('level_detection', {}))
-        
-        # State storage for each symbol and timeframe
-        self.market_states = {}
+        self.swing_detector = swing_detector
+        self.trend_analyzer = trend_analyzer
+        self.fib_detector = fib_detector
     
-    def get_state(self, symbol: str, timeframe: str) -> Optional[MarketState]:
+    def get_context(self, symbol: str, timeframe: str) -> Optional[MarketContext]:
         """
-        Get the current market state for a symbol and timeframe
+        Get market context for a specific symbol and timeframe
         
         Args:
             symbol: Trading pair
             timeframe: Candle timeframe
             
         Returns:
-            Market state or None if not available
+            MarketContext object or None if not found
         """
         key = f"{symbol}_{timeframe}"
-        return self.market_states.get(key)
+        return self.contexts.get(key)
     
-    async def update(self, data: Dict[str, Any]) -> Optional[MarketState]:
+    def update_context(self, symbol: str, timeframe: str, candles: List[Dict[str, Any]]) -> MarketContext:
         """
-        Update market structure based on new candle data
+        Update or create market context for a symbol and timeframe
         
         Args:
-            data: Market data dictionary with candles
+            symbol: Trading pair
+            timeframe: Candle timeframe
+            candles: List of candle dictionaries
             
         Returns:
-            Updated market state
+            Updated MarketContext object
         """
-        symbol = data.get('symbol')
-        timeframe = data.get('timeframe')
-        candles = data.get('candles', [])
-        timestamp = data.get('timestamp', datetime.now().isoformat())
-        
-        if not symbol or not timeframe or not candles or len(candles) < 10:
-            logger.warning(f"Insufficient data to update market structure: {symbol} {timeframe}")
+        if not candles:
+            logger.warning(f"No candles provided for {symbol} {timeframe}")
             return None
         
-        # Get existing state or create new one
+        # Get existing context or create new one
         key = f"{symbol}_{timeframe}"
-        state = self.market_states.get(key)
+        context = self.contexts.get(key)
         
-        # Create new state if doesn't exist
-        if not state:
-            state = MarketState(
-                symbol=symbol,
-                timeframe=timeframe,
-                timestamp=timestamp,
-                trend=TrendState(),
-                swings={
-                    'highs': [],
-                    'lows': []
-                },
-                levels={
-                    'support': [],
-                    'resistance': []
-                },
-                structure_breaks=[],
-                last_updated=time.time()
-            )
+        if not context:
+            context = MarketContext(symbol, timeframe)
+            self.contexts[key] = context
         
-        # Update timestamp
-        state.timestamp = timestamp
+        # Update timestamp and current price
+        context.timestamp = datetime.now().isoformat()
+        context.current_price = candles[-1].get('close')
         
-        # Step 1: Detect swing points
-        swings = self.swing_detector.detect_swings(candles)
+        # Step 1: Update swing points if detector is available
+        if self.swing_detector:
+            context = self.swing_detector.update_market_context(context, candles)
         
-        # Convert to SwingPoint objects
-        swing_highs = [
-            SwingPoint(
-                price=h['price'],
-                timestamp=h['timestamp'],
-                type='high',
-                index=h['index'],
-                strength=h.get('strength', 0.5)
-            ) for h in swings.get('highs', [])
-        ]
+        # Step 2: Update trend if analyzer is available
+        if self.trend_analyzer:
+            context = self.trend_analyzer.update_market_context(context)
         
-        swing_lows = [
-            SwingPoint(
-                price=l['price'],
-                timestamp=l['timestamp'],
-                type='low',
-                index=l['index'],
-                strength=l.get('strength', 0.5)
-            ) for l in swings.get('lows', [])
-        ]
+        # Step 3: Update Fibonacci levels if detector is available
+        if self.fib_detector:
+            context = self.fib_detector.update_market_context(context, candles)
         
-        # Update state with new swing points
-        state.swings = {
-            'highs': swing_highs,
-            'lows': swing_lows
-        }
+        # Update last updated timestamp
+        context.last_updated = time.time()
         
-        # Step 2: Analyze trend
-        trend_results = self.trend_analyzer.analyze_trend(candles, swings)
-        
-        # Update trend state
-        state.trend.direction = self._parse_trend_direction(trend_results.get('trend', TrendDirection.UNKNOWN.value))
-        state.trend.strength = trend_results.get('strength', 0.0)
-        
-        # Update structure breaks
-        structure_breaks = trend_results.get('structure_breaks', [])
-        if structure_breaks:
-            state.structure_breaks = structure_breaks
-            state.trend.last_break = structure_breaks[0] if structure_breaks else None
-        
-        # Step 3: Detect support/resistance levels
-        levels = self.level_detector.detect_levels(candles, swings)
-        state.levels = levels
-        
-        # Step 4: Update latest swing high/low references
-        if swing_highs:
-            latest_high = max(swing_highs, key=lambda x: x.index)
-            state.trend.swing_high = latest_high
-            
-        if swing_lows:
-            latest_low = max(swing_lows, key=lambda x: x.index)
-            state.trend.swing_low = latest_low
-        
-        # Save updated state
-        state.last_updated = time.time()
-        self.market_states[key] = state
-        
-        return state
+        return context
     
-    def analyze_multi_timeframe(self, symbol: str, timeframes: List[str]) -> Dict[str, Any]:
+    def is_near_level(self, context: MarketContext, price: float, level_type: str = 'all', tolerance: float = 0.005) -> bool:
         """
-        Perform cross-timeframe analysis
+        Check if a price is near any Fibonacci level
         
         Args:
-            symbol: Trading pair
-            timeframes: List of timeframes sorted from shortest to longest
+            context: MarketContext object
+            price: Price to check
+            level_type: Type of level to check ('support', 'resistance', or 'all')
+            tolerance: Price tolerance as percentage
             
         Returns:
-            Dictionary with cross-timeframe analysis
+            True if price is near a level, False otherwise
         """
-        results = {}
-        trend_alignment = 0
-        trend_count = 0
-        
-        # Analyze each timeframe
-        for tf in timeframes:
-            state = self.get_state(symbol, tf)
-            if not state:
-                continue
-                
-            results[tf] = {
-                'trend': state.trend.direction.value,
-                'strength': state.trend.strength,
-                'last_break': state.trend.last_break,
-                'has_recent_break': bool(state.structure_breaks) and \
-                                    self._is_break_recent(state.structure_breaks[0], tf) if state.structure_breaks else False
-            }
-            
-            # Count aligned timeframes
-            if state.trend.direction == TrendDirection.UP:
-                trend_alignment += 1
-                trend_count += 1
-            elif state.trend.direction == TrendDirection.DOWN:
-                trend_alignment -= 1
-                trend_count += 1
-            else:
-                trend_count += 1
-        
-        # Higher timeframe bias (if available)
-        higher_tf_bias = None
-        higher_tf_strength = 0
-        
-        if timeframes and results:
-            for tf in reversed(timeframes):  # Start from highest timeframe
-                if tf in results:
-                    higher_tf_bias = results[tf]['trend']
-                    higher_tf_strength = results[tf]['strength']
-                    break
-        
-        # Calculate alignment metrics
-        if trend_count > 0:
-            alignment_strength = abs(trend_alignment) / trend_count
-            alignment_direction = "bullish" if trend_alignment > 0 else "bearish" if trend_alignment < 0 else "neutral"
-        else:
-            alignment_strength = 0
-            alignment_direction = "unknown"
-        
-        return {
-            'timeframes': results,
-            'alignment': {
-                'direction': alignment_direction,
-                'strength': alignment_strength,
-                'score': trend_alignment / max(1, trend_count)  # -1 to 1 range
-            },
-            'higher_timeframe_bias': higher_tf_bias,
-            'higher_timeframe_strength': higher_tf_strength
-        }
-    
-    def detect_pullbacks(self, symbol: str, timeframe: str) -> List[Dict[str, Any]]:
-        """
-        Detect pullbacks in the current trend
-        
-        A pullback is a temporary price movement against the trend
-        
-        Args:
-            symbol: Trading pair
-            timeframe: Timeframe to analyze
-            
-        Returns:
-            List of detected pullbacks
-        """
-        state = self.get_state(symbol, timeframe)
-        if not state:
-            return []
-        
-        # Trend direction
-        trend = state.trend.direction
-        
-        # Need defined trend
-        if trend == TrendDirection.UNKNOWN or trend == TrendDirection.SIDEWAYS:
-            return []
-        
-        pullbacks = []
-        
-        # In uptrend, look for pullbacks to support levels
-        if trend == TrendDirection.UP:
-            support_levels = state.levels.get('support', [])
-            
-            for level in support_levels:
-                # Check if price is currently near this level
-                current_price = state.last_price if hasattr(state, 'last_price') else None
-                if not current_price:
-                    continue
-                
-                # Check if price is within the support zone
-                if level['zone'][0] <= current_price <= level['zone'][1]:
-                    pullbacks.append({
-                        'type': 'support_pullback',
-                        'level': level['price'],
-                        'strength': level['strength'],
-                        'current_price': current_price,
-                        'trend': trend.value
-                    })
-        
-        # In downtrend, look for pullbacks to resistance levels
-        elif trend == TrendDirection.DOWN:
-            resistance_levels = state.levels.get('resistance', [])
-            
-            for level in resistance_levels:
-                # Check if price is currently near this level
-                current_price = state.last_price if hasattr(state, 'last_price') else None
-                if not current_price:
-                    continue
-                
-                # Check if price is within the resistance zone
-                if level['zone'][0] <= current_price <= level['zone'][1]:
-                    pullbacks.append({
-                        'type': 'resistance_pullback',
-                        'level': level['price'],
-                        'strength': level['strength'],
-                        'current_price': current_price,
-                        'trend': trend.value
-                    })
-        
-        return pullbacks
-    
-    def _parse_trend_direction(self, trend_str: str) -> TrendDirection:
-        """Convert string trend direction to enum"""
-        if trend_str == "uptrend":
-            return TrendDirection.UP
-        elif trend_str == "downtrend":
-            return TrendDirection.DOWN
-        elif trend_str == "sideways":
-            return TrendDirection.SIDEWAYS
-        else:
-            return TrendDirection.UNKNOWN
-    
-    def _is_break_recent(self, break_data: Dict[str, Any], timeframe: str) -> bool:
-        """Check if a structure break is recent based on timeframe"""
-        if not break_data or 'index' not in break_data:
+        if not context or not context.fib_levels:
             return False
+        
+        levels_to_check = []
+        
+        if level_type == 'support' or level_type == 'all':
+            levels_to_check.extend(context.fib_levels.get('support', []))
+        
+        if level_type == 'resistance' or level_type == 'all':
+            levels_to_check.extend(context.fib_levels.get('resistance', []))
+        
+        # Check each level
+        for level in levels_to_check:
+            level_price = level.get('price')
+            if level_price:
+                # Calculate tolerance range
+                tolerance_range = level_price * tolerance
+                
+                # Check if price is within tolerance range
+                if abs(price - level_price) <= tolerance_range:
+                    return True
+        
+        return False
+    
+    def detect_order_blocks(self, context: MarketContext, candles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Detect potential order blocks based on market structure
+        
+        An order block is often formed after a swing point is created
+        
+        Args:
+            context: MarketContext object
+            candles: List of candle dictionaries
             
-        # Set thresholds for "recent" based on timeframe
-        thresholds = {
-            '1m': 20,
-            '5m': 12,
-            '15m': 8,
-            '30m': 6,
-            '1h': 4,
-            '4h': 3,
-            '1d': 2
+        Returns:
+            List of potential order blocks
+        """
+        if not context or not candles:
+            return []
+        
+        # Check for swing highs and lows
+        swing_high = context.swing_high
+        swing_low = context.swing_low
+        
+        order_blocks = []
+        
+        # Look for demand order blocks (support)
+        if swing_low and context.trend == TrendDirection.UP.value:
+            # Find candle that created the swing low
+            swing_index = swing_low.index
+            if 0 <= swing_index < len(candles):
+                # Order block is typically formed by the candle before the swing
+                ob_index = max(0, swing_index - 1)
+                
+                order_blocks.append({
+                    'type': 'demand',  # Buying pressure/support
+                    'price_high': candles[ob_index].get('open', candles[ob_index].get('high', 0)),
+                    'price_low': candles[ob_index].get('close', candles[ob_index].get('low', 0)),
+                    'index': ob_index,
+                    'timestamp': candles[ob_index].get('timestamp', ''),
+                    'related_swing': self._swing_point_to_dict(swing_low)
+                })
+        
+        # Look for supply order blocks (resistance)
+        if swing_high and context.trend == TrendDirection.DOWN.value:
+            # Find candle that created the swing high
+            swing_index = swing_high.index
+            if 0 <= swing_index < len(candles):
+                # Order block is typically formed by the candle before the swing
+                ob_index = max(0, swing_index - 1)
+                
+                order_blocks.append({
+                    'type': 'supply',  # Selling pressure/resistance
+                    'price_high': candles[ob_index].get('open', candles[ob_index].get('high', 0)),
+                    'price_low': candles[ob_index].get('close', candles[ob_index].get('low', 0)),
+                    'index': ob_index,
+                    'timestamp': candles[ob_index].get('timestamp', ''),
+                    'related_swing': self._swing_point_to_dict(swing_high)
+                })
+        
+        return order_blocks
+    
+    def _swing_point_to_dict(self, point: SwingPoint) -> Optional[Dict[str, Any]]:
+        """Convert SwingPoint to dictionary"""
+        if point is None:
+            return None
+        return {
+            'price': point.price,
+            'timestamp': point.timestamp,
+            'index': point.index,
+            'type': point.type,
+            'strength': point.strength
         }
-        
-        # Default if timeframe not in thresholds
-        threshold = thresholds.get(timeframe, 5)
-        
-        # Get candle index of the break
-        break_index = break_data['index']
-        
-        # Check if break happened within the threshold
-        return break_index >= (threshold * -1)
