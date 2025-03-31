@@ -7,7 +7,7 @@ from dataclasses import asdict
 from normalizer.base import Normalizer
 from shared.cache.cache_service import CacheService
 from infrastructure.database.db import Database
-from services.consumer.candle_consumer import CandleConsumer
+from consumer.candle_consumer import CandleConsumer
 from shared.constants import Exchanges, Queues, RoutingKeys
 from shared.queue.queue_service import QueueService
 

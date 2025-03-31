@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, func, desc
 from sqlalchemy.exc import SQLAlchemyError
 
-from ..models.candle import CandleModel
+from ..models.candle_model import CandleModel
 from .base_repository import BaseRepository
 from shared.domain.models.candle import CandleData
 
