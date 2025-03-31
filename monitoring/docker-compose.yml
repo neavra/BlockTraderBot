@@ -1,30 +1,5 @@
 version: '3.8'
 services:
-  # Monitoring Service
-  monitoring:
-    build:
-      context: .
-      dockerfile: Dockerfile.monitoring
-    container_name: monitoring-service
-    restart: always
-    depends_on:
-      - rabbitmq
-      - cache
-    environment:
-      - REDIS_HOST=cache
-      - REDIS_PORT=${REDIS_PORT:-6379}
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_USER=guest
-      - RABBITMQ_PASS=guest
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
-      - ENVIRONMENT=${ENVIRONMENT:-development}
-    volumes:
-      - ./config:/app/config
-    networks:
-      - monitoring-network
-    command: python -m monitoring.main
-
   # RabbitMQ Message Broker
   rabbitmq:
     image: rabbitmq:4.0-management
