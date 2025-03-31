@@ -6,7 +6,7 @@ from typing import Dict, Any
 # Import necessary services and components
 from data.logs.logging import setup_logging
 from config.config_loader import load_config
-from infrastructure.database.db import Database
+from database.db import Database
 from managers.candle_manager import CandleManager
 from data.data_service import DataService
 

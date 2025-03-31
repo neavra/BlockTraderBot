@@ -6,7 +6,7 @@ from typing import Dict, Any, List
 from utils.helper import DateTimeEncoder
 
 from ..base import Normalizer
-from shared.domain.models.candle import CandleData
+from shared.domain.dto.candle import CandleData
 
 class BinanceRestNormalizer(Normalizer):
     """

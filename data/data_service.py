@@ -8,7 +8,7 @@ from config.config_loader import load_config
 from connectors.websocket.factory import WebSocketClientFactory
 from connectors.rest.factory import RestClientFactory
 from connectors.rest.binance_rest import BinanceRestClient
-from infrastructure.database.db import Database
+from database.db import Database
 from managers.candle_manager import CandleManager
 from utils.concurrency import gather_with_concurrency
 

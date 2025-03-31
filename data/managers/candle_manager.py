@@ -6,13 +6,13 @@ from dataclasses import asdict
 
 from normalizer.base import Normalizer
 from shared.cache.cache_service import CacheService
-from infrastructure.database.db import Database
+from database.db import Database
 from consumer.candle_consumer import CandleConsumer
 from shared.constants import Exchanges, Queues, RoutingKeys
 from shared.queue.queue_service import QueueService
 
 from .base import BaseManager
-from shared.domain.models.candle import CandleData
+from shared.domain.dto.candle import CandleData
 from normalizer.factory import NormalizerFactory
 from shared.domain.events.market_events import CandleClosedEvent, CandleUpdatedEvent
 

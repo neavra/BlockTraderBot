@@ -4,7 +4,7 @@ import json
 from typing import Dict, Any
 
 from utils.helper import DateTimeEncoder
-from shared.domain.models.candle import CandleData
+from shared.domain.dto.candle import CandleData
 
 from ..base import Normalizer
 

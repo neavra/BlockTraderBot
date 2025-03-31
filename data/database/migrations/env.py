@@ -12,8 +12,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 
 # Import the SQLAlchemy models and configuration
 from config.settings import DATABASE_URI
-from infrastructure.database.base import BaseModel
-from infrastructure.database.models import *  # Import all models
+from database.base import BaseModel
+from database.models import *  # Import all models
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
