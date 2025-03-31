@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 @dataclass
-class Position:
+class PositionDto:
     symbol: str
     side: str
     size: float

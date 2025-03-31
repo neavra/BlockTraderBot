@@ -9,7 +9,7 @@ from datetime import datetime
 
 from .base import WebSocketClient
 from .connection_manager import WebSocketConnectionManager
-from shared.domain.dto.candle import CandleData
+from shared.domain.dto.candle_dto import CandleDto
 
 class BinanceWebSocketClient(WebSocketClient):
     """

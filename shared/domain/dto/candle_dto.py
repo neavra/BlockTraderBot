@@ -5,7 +5,7 @@ from dataclasses_json import dataclass_json
 from dateutil import parser  # For parsing ISO date strings
 
 @dataclass
-class CandleData:
+class CandleDto:
     """
     Domain model for candlestick data.
     """

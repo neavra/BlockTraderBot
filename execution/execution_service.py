@@ -8,7 +8,7 @@ from shared.cache.cache_service import CacheService
 
 from execution.exchange.exchange_interface import ExchangeInterface
 from shared.constants import Exchanges, Queues, RoutingKeys, CacheKeys, CacheTTL
-from shared.domain.dto.order import Order
+from shared.domain.dto.order_dto import OrderDto
 
 
 logger = logging.getLogger(__name__)
@@ -328,7 +328,7 @@ class ExecutionService:
                 return None
             
             # Create Order object for tracking
-            order = Order(
+            order = OrderDto(
                 id=order_result['id'],
                 symbol=symbol,
                 side=side,
@@ -357,7 +357,7 @@ class ExecutionService:
             logger.error(f"Error executing order: {e}", exc_info=True)
             
             # Publish failed order event
-            failed_order = Order(
+            failed_order = OrderDto(
                 id=f"failed_{int(datetime.now().timestamp())}",
                 symbol=order_params['symbol'],
                 side=order_params['side'],
@@ -402,7 +402,7 @@ class ExecutionService:
                 # Try to fetch the order details
                 try:
                     order_data = await self.exchange.fetch_order(order_id, symbol)
-                    order = Order(
+                    order = OrderDto(
                         id=order_data['id'],
                         symbol=symbol,
                         side=order_data.get('side', 'unknown'),
@@ -415,7 +415,7 @@ class ExecutionService:
                 except Exception as fetch_error:
                     logger.warning(f"Could not fetch order details after cancellation: {fetch_error}")
                     # Create a minimal order object for the event
-                    order = Order(
+                    order = OrderDto(
                         id=order_id,
                         symbol=symbol,
                         side='unknown',
@@ -512,7 +512,7 @@ class ExecutionService:
             # Return a small default position size
             return 0.01
     
-    async def _cache_order(self, order_id: str, order: Order) -> None:
+    async def _cache_order(self, order_id: str, order: OrderDto) -> None:
         """
         Cache an order object for later reference.
         
@@ -565,7 +565,7 @@ class ExecutionService:
         except Exception as e:
             logger.error(f"Error caching order {order_id}: {e}")
     
-    async def _publish_order_event(self, order: Order, event_type: str) -> None:
+    async def _publish_order_event(self, order: OrderDto, event_type: str) -> None:
         """
         Publish an order event to the tracking queue.
         

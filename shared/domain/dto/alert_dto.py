@@ -18,7 +18,7 @@ class AlertType(enum.Enum):
     INFO = "ℹ️ System Info"
 
 @dataclass
-class Alert:
+class AlertDto:
     type: AlertType
     symbol: str
     message: str

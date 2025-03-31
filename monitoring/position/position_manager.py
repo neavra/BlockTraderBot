@@ -1,5 +1,5 @@
 from typing import List, Dict, Any, Optional
-from shared.domain.dto.position import Position
+from shared.domain.dto.position_dto import PositionDto
 
 class PositionManager:
     """Placeholder for position management functionality"""
@@ -7,7 +7,7 @@ class PositionManager:
     def __init__(self):
         # Hardcoded sample positions for demonstration
         self.positions = [
-            Position(
+            PositionDto(
                 symbol="BTC-USD",
                 side="long",
                 size=0.5,
@@ -17,7 +17,7 @@ class PositionManager:
                 pnl_percent=5.93,
                 timestamp="2025-03-12T14:30:00Z"
             ),
-            Position(
+            PositionDto(
                 symbol="ETH-USD",
                 side="short",
                 size=2.0,
@@ -29,9 +29,9 @@ class PositionManager:
             )
         ]
     
-    def get_all_positions(self) -> List[Position]:
+    def get_all_positions(self) -> List[PositionDto]:
         return self.positions
 
-    def get_position_by_symbol(self, symbol: str) -> Optional[Position]:
+    def get_position_by_symbol(self, symbol: str) -> Optional[PositionDto]:
         positions = [pos for pos in self.positions if pos.symbol == symbol]
         return positions[0] if positions else None

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from managers.candle_manager import CandleManager
 
 from .base import RestClient
-from shared.domain.dto.candle import CandleData
+from shared.domain.dto.candle_dto import CandleDto
 
 class BinanceRestClient(RestClient):
     """
@@ -72,7 +72,7 @@ class BinanceRestClient(RestClient):
             limit: Optional[int] = None, 
             startTime: Optional[int] = None,
             endTime: Optional[int] = None
-            ) -> List[CandleData]:
+            ) -> List[CandleDto]:
         """
         Fetch candlestick data from Binance.
         
@@ -82,7 +82,7 @@ class BinanceRestClient(RestClient):
             endTime: End time in milliseconds
             
         Returns:
-            List of CandleData objects
+            List of CandleDto objects
             
         Raises:
             ValueError: If the input parameters are invalid
@@ -106,9 +106,9 @@ class BinanceRestClient(RestClient):
                     
                     data = await response.json()
                     
-                    """ # Parse and convert to CandleData objects
+                    """ # Parse and convert to CandleDto objects
                     candles = [
-                        CandleData(
+                        CandleDto(
                             symbol=self.symbol, 
                             exchange=self.exchange, 
                             timeframe=self.interval,

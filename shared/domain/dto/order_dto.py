@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 @dataclass
-class Order:
+class OrderDto:
     id: str
     symbol: str
     side: str

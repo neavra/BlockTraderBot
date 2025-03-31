@@ -9,11 +9,11 @@ from monitoring.tele.tele_bot import TeleBot
 from monitoring.order.order_manager import OrderManager
 from monitoring.position.position_manager import PositionManager
 from monitoring.alert.alert_manager import AlertManager, TelegramAlertProvider
-from shared.domain.dto.alert import Alert, AlertType
+from shared.domain.dto.alert_dto import AlertDto, AlertType
 from shared.queue.queue_service import QueueService
 from shared.cache.cache_service import CacheService
 from shared.constants import Exchanges, Queues, RoutingKeys
-from shared.domain.dto.order import Order
+from shared.domain.dto.order_dto import OrderDto
 
 from execution.exchange.exchange_interface import ExchangeInterface
 
@@ -260,7 +260,7 @@ class MonitoringService:
         
         try:
             # Create an alert object
-            alert = Alert(
+            alert = AlertDto(
                 type=AlertType.ORDER_PLACED,
                 symbol=event.get("symbol", "unknown"),
                 message=f"Order {event.get('order_id', 'unknown')} received",

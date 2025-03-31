@@ -6,13 +6,13 @@ import logging
 from typing import Any
 import uuid
 
-from shared.domain.dto.candle import CandleData
+from shared.domain.dto.candle_dto import CandleDto
 from database.repository.candle_repository import CandleRepository
 from database.db import Database
 from utils.error_handling import retry #, handle_exceptions
 from .base import BaseConsumer
 
-class CandleConsumer(BaseConsumer[CandleData]):
+class CandleConsumer(BaseConsumer[CandleDto]):
     """
     Consumer for processing candle data from the queue.
     Stores candles in the database using the candle repository.
@@ -41,7 +41,7 @@ class CandleConsumer(BaseConsumer[CandleData]):
         self.repository = CandleRepository(session=self.database.get_session())
         self.logger.info("Initialized candle consumer with repository")
     
-    async def process_item(self, candle: CandleData) -> None:
+    async def process_item(self, candle: CandleDto) -> None:
         """
         Process a candle from the queue.
         Store it in the database using the repository.

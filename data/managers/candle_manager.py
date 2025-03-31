@@ -12,7 +12,7 @@ from shared.constants import Exchanges, Queues, RoutingKeys
 from shared.queue.queue_service import QueueService
 
 from .base import BaseManager
-from shared.domain.dto.candle import CandleData
+from shared.domain.dto.candle_dto import CandleDto
 from normalizer.factory import NormalizerFactory
 from shared.domain.events.market_events import CandleClosedEvent, CandleUpdatedEvent
 
@@ -194,7 +194,7 @@ class CandleManager(BaseManager):
             
             self.logger.info("Normalized Candle:" + str(normalized_candle))
             
-            # Normalize the dataclass CandleData to JSON string
+            # Normalize the dataclass CandleDto to JSON string
             normalized_candle_json = normalizer.to_json(normalized_candle)
             # Cache key for this candle
             cache_key = f"{normalized_candle.exchange}:{normalized_candle.symbol}:{normalized_candle.timeframe}:{normalized_candle.timestamp}"
@@ -257,7 +257,7 @@ class CandleManager(BaseManager):
             # Process each candle in the list
             for data in data_list:
                 # Normalize the data
-                normalized_candle : CandleData = await normalizer.normalize_rest_data(data=data, exchange=exchange, symbol=symbol, interval=interval)
+                normalized_candle : CandleDto = await normalizer.normalize_rest_data(data=data, exchange=exchange, symbol=symbol, interval=interval)
                 
                 # Convert to json
                 normalized_candle_json = normalizer.to_json(normalized_candle)
@@ -310,9 +310,9 @@ class CandleManager(BaseManager):
         try: 
             self.logger.info(f"Received candle: {candle}")
             if self.candle_consumer:
-                candledata = CandleData(**candle)
-                await self.candle_consumer.process_item(candle=candledata)
-                self.logger.info(f"Candle consumed by consumer: {candledata}")
+                CandleDto = CandleDto(**candle)
+                await self.candle_consumer.process_item(candle=CandleDto)
+                self.logger.info(f"Candle consumed by consumer: {CandleDto}")
 
         except asyncio.CancelledError:
             # Handle cancellation gracefully

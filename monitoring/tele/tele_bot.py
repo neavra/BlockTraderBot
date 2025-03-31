@@ -3,7 +3,7 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler
 
-from shared.domain.dto.alert import Alert
+from shared.domain.dto.alert_dto import AlertDto
 
 # Set up logging
 logging.basicConfig(
@@ -293,7 +293,7 @@ class TeleBot:
             
             await query.edit_message_text(response, parse_mode="Markdown", reply_markup=reply_markup)
     
-    async def send_alert(self, alert: Alert) -> None:
+    async def send_alert(self, alert: AlertDto) -> None:
         """
         Send an alert to the configured chat.
         

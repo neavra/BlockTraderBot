@@ -1,5 +1,5 @@
 from typing import List, Dict, Any, Optional
-from shared.domain.dto.order import Order
+from shared.domain.dto.order_dto import OrderDto
 
 class OrderManager:
     """Placeholder for order management functionality"""
@@ -15,7 +15,7 @@ class OrderManager:
         # self.repository = order_repository
         # Hardcoded sample orders for demonstration
         self.orders = [
-            Order(
+            OrderDto(
                 id="1234567",
                 symbol="BTC-USD",
                 side="buy",
@@ -25,7 +25,7 @@ class OrderManager:
                 status="open",
                 timestamp="2025-03-13T10:30:00Z"
             ),
-            Order(
+            OrderDto(
                 id="1234568",
                 symbol="ETH-USD",
                 side="sell",
@@ -35,7 +35,7 @@ class OrderManager:
                 status="open",
                 timestamp="2025-03-13T10:35:00Z"
             ),
-            Order(
+            OrderDto(
                 id="1234569",
                 symbol="BTC-USD",
                 side="buy",
@@ -47,9 +47,9 @@ class OrderManager:
             )
         ]
     
-    def get_all_orders(self) -> List[Order]:
+    def get_all_orders(self) -> List[OrderDto]:
         # return await self.repository.get_all_orders()
         return self.orders
 
-    def get_orders_by_symbol(self, symbol: str) -> List[Order]:
+    def get_orders_by_symbol(self, symbol: str) -> List[OrderDto]:
         return [order for order in self.orders if order.symbol == symbol]

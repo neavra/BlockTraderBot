@@ -6,21 +6,21 @@ from typing import Dict, Any, List
 from utils.helper import DateTimeEncoder
 
 from ..base import Normalizer
-from shared.domain.dto.candle import CandleData
+from shared.domain.dto.candle_dto import CandleDto
 
 class BinanceRestNormalizer(Normalizer):
     """
     Normalizer for Binance REST API data.
     """
     
-    async def normalize_websocket_data(self, data: Dict[str, Any]) -> CandleData:
+    async def normalize_websocket_data(self, data: Dict[str, Any]) -> CandleDto:
         """
         This method is implemented to satisfy the abstract base class,
         but for Binance we have a separate WebSocket normalizer.
         """
         raise NotImplementedError("Use BinanceWebSocketNormalizer for WebSocket data")
     
-    async def normalize_rest_data(self, data: List, exchange: str, symbol: str, interval: str) -> CandleData:
+    async def normalize_rest_data(self, data: List, exchange: str, symbol: str, interval: str) -> CandleDto:
         """
         Normalize Binance REST API data to standard format.
         
@@ -48,7 +48,7 @@ class BinanceRestNormalizer(Normalizer):
         
         current_timestamp = datetime.now().timestamp() * 1000
         # Create a normalized candle representation
-        normalized_data = CandleData(
+        normalized_data = CandleDto(
             symbol=symbol.upper(),
             exchange=exchange, 
             timeframe=interval,
@@ -63,5 +63,5 @@ class BinanceRestNormalizer(Normalizer):
         
         return normalized_data
     
-    def to_json(self, normalized_candle : CandleData) -> str:
+    def to_json(self, normalized_candle : CandleDto) -> str:
         return json.dumps(asdict(normalized_candle), cls=DateTimeEncoder)

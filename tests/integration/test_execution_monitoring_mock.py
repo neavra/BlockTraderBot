@@ -19,8 +19,8 @@ from config.config_loader import load_config
 from shared.queue.queue_service import QueueService
 from shared.cache.cache_service import CacheService
 from shared.constants import Exchanges, Queues, RoutingKeys
-from shared.domain.dto.alert import Alert, AlertType
-from shared.domain.dto.order import Order
+from shared.domain.dto.alert_dto import AlertDto, AlertType
+from shared.domain.dto.order_dto import OrderDto
 
 # Execution layer imports
 from execution.exchange.hyperliquid import HyperliquidExchange
@@ -43,17 +43,17 @@ class MockAlertProvider(AlertProvider):
     def __init__(self):
         self.alerts = []
     
-    async def send_alert(self, alert: Alert) -> bool:
+    async def send_alert(self, alert: AlertDto) -> bool:
         """Capture an alert instead of sending it."""
         self.alerts.append(alert)
         logger.info(f"MockAlertProvider captured alert: {alert.type.value} - {alert.message}")
         return True
     
-    def get_alerts_by_type(self, alert_type: AlertType) -> List[Alert]:
+    def get_alerts_by_type(self, alert_type: AlertType) -> List[AlertDto]:
         """Get alerts of a specific type."""
         return [a for a in self.alerts if a.type == alert_type]
     
-    def get_alerts_for_order(self, order_id: str) -> List[Alert]:
+    def get_alerts_for_order(self, order_id: str) -> List[AlertDto]:
         """Get alerts for a specific order ID."""
         return [a for a in self.alerts if hasattr(a, 'details') and 
                 a.details and a.details.get('order_id') == order_id]
@@ -224,7 +224,7 @@ class IntegrationTest:
         logger.info("Testing direct alert sending...")
         
         # Create a test alert
-        test_alert = Alert(
+        test_alert = AlertDto(
             type=AlertType.ORDER_PLACED,
             symbol="BTC-USD",
             message="Test direct alert",
@@ -336,7 +336,7 @@ class IntegrationTest:
         }
         
         # Create the alert that would be generated for this event
-        order_alert = Alert(
+        order_alert = AlertDto(
             type=AlertType.ORDER_PLACED,
             symbol=order_params['symbol'],
             message=f"Order {self.test_order_id} received",
@@ -422,7 +422,7 @@ class IntegrationTest:
         }
         
         # Create the alert that would be generated for this event
-        cancel_alert = Alert(
+        cancel_alert = AlertDto(
             type=AlertType.ORDER_CANCELLED,
             symbol="BTC-USD",
             message=f"Order {self.test_order_id} cancelled",

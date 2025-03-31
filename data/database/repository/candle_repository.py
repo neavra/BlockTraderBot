@@ -7,7 +7,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from ..models.candle_model import CandleModel
 from .base_repository import BaseRepository
-from shared.domain.dto.candle import CandleData
+from shared.domain.dto.candle_dto import CandleDto
 
 
 class CandleRepository(BaseRepository[CandleModel]):
@@ -34,7 +34,7 @@ class CandleRepository(BaseRepository[CandleModel]):
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
         limit: Optional[int] = None
-    ) -> List[CandleData]:
+    ) -> List[CandleDto]:
         """
         Find candles for a specific exchange, symbol and timeframe.
         
@@ -86,7 +86,7 @@ class CandleRepository(BaseRepository[CandleModel]):
         exchange: str,
         symbol: str,
         timeframe: str
-    ) -> Optional[CandleData]:
+    ) -> Optional[CandleDto]:
         """
         Get the latest candle for a specific exchange, symbol and timeframe.
         
@@ -144,7 +144,7 @@ class CandleRepository(BaseRepository[CandleModel]):
             )
             return 0
     
-    def bulk_upsert_candles(self, candles: List[CandleData]) -> int:
+    def bulk_upsert_candles(self, candles: List[CandleDto]) -> int:
         """
         Insert or update multiple candles in a single transaction.
         
@@ -188,7 +188,7 @@ class CandleRepository(BaseRepository[CandleModel]):
             self.logger.error(f"Error bulk upserting candles: {str(e)}")
             return 0
     
-    def _to_domain(self, db_obj: CandleModel) -> CandleData:
+    def _to_domain(self, db_obj: CandleModel) -> CandleDto:
         """
         Convert a database model to a domain model.
         
@@ -199,7 +199,7 @@ class CandleRepository(BaseRepository[CandleModel]):
             Corresponding domain model
         """
         try:
-            return CandleData(
+            return CandleDto(
                 id=db_obj.id,
                 symbol=db_obj.symbol,
                 exchange=db_obj.exchange,
@@ -216,7 +216,7 @@ class CandleRepository(BaseRepository[CandleModel]):
             self.logger.error(f"Error converting DB model to domain model: {str(e)}")
             raise
     
-    def _to_db(self, domain_obj: CandleData) -> CandleModel:
+    def _to_db(self, domain_obj: CandleDto) -> CandleModel:
         """
         Convert a domain model to a database model.
         

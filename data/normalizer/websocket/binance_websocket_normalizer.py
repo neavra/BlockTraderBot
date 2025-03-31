@@ -4,7 +4,7 @@ import json
 from typing import Dict, Any
 
 from utils.helper import DateTimeEncoder
-from shared.domain.dto.candle import CandleData
+from shared.domain.dto.candle_dto import CandleDto
 
 from ..base import Normalizer
 
@@ -13,7 +13,7 @@ class BinanceWebSocketNormalizer(Normalizer):
     Normalizer for Binance WebSocket data.
     """
     
-    async def normalize_websocket_data(self, data: Dict[str, Any]) -> CandleData:
+    async def normalize_websocket_data(self, data: Dict[str, Any]) -> CandleDto:
         """
         Normalize Binance WebSocket data to standard format.
         
@@ -25,7 +25,7 @@ class BinanceWebSocketNormalizer(Normalizer):
         """
         
         # Create a normalized candle representation
-        normalized_data = CandleData(
+        normalized_data = CandleDto(
             symbol= data.get("symbol", "").upper(),
             exchange="binance",
             timeframe= data.get("interval", ""),
@@ -48,5 +48,5 @@ class BinanceWebSocketNormalizer(Normalizer):
         """
         raise NotImplementedError("Use BinanceRestNormalizer for REST data")
     
-    def to_json(self, normalized_candle : CandleData) -> str:
+    def to_json(self, normalized_candle : CandleDto) -> str:
         return json.dumps(asdict(normalized_candle), cls=DateTimeEncoder)

@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
 
-from shared.domain.dto.alert import Alert
+from shared.domain.dto.alert_dto import AlertDto
 from monitoring.tele.tele_bot import TeleBot
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,7 @@ class AlertProvider(ABC):
     """Abstract base class for alert providers."""
     
     @abstractmethod
-    async def send_alert(self, alert: Alert) -> bool:
+    async def send_alert(self, alert: AlertDto) -> bool:
         """
         Send an alert through this provider.
         
@@ -39,7 +39,7 @@ class TelegramAlertProvider(AlertProvider):
         """
         self.telegram_bot = telegram_bot
     
-    async def send_alert(self, alert: Alert) -> bool:
+    async def send_alert(self, alert: AlertDto) -> bool:
         """
         Send an alert via Telegram.
         
@@ -93,7 +93,7 @@ class AlertManager:
         if provider in self.providers:
             self.providers.remove(provider)
     
-    async def send_alert(self, alert: Alert) -> bool:
+    async def send_alert(self, alert: AlertDto) -> bool:
         """
         Send an alert through all configured providers.
         

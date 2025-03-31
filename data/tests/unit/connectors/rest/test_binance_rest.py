@@ -4,7 +4,7 @@ from unittest.mock import patch, MagicMock, AsyncMock
 from datetime import datetime, timezone
 
 from connectors.rest.binance_rest import BinanceRestClient
-from domain.models.candle import CandleData
+from domain.models.candle import CandleDto
 
 
 @pytest.fixture
