@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from shared.domain.models.candle import CandleData
+from shared.domain.dto.candle import CandleData
 from .base_event import BaseEvent
 
 @dataclass(kw_only=True)
