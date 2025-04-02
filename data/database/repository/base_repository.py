@@ -3,7 +3,7 @@ import logging
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
-from ..base import BaseModel
+from ..models.base import BaseModel
 
 T = TypeVar('T', bound=BaseModel)
 D = TypeVar('D')  # Domain model type
