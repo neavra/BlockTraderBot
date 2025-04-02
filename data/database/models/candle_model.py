@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import datetime, UTC
 from sqlalchemy import Column, String, Float, Integer, DECIMAL, TIMESTAMP, Boolean, Index, UniqueConstraint
 
-from ..base import BaseModel
+from .base import BaseModel
 
 
 class CandleModel(BaseModel):
@@ -20,7 +20,7 @@ class CandleModel(BaseModel):
     timeframe = Column(String(5), nullable=False, index=True)
     
     # Time
-    timestamp = Column(TIMESTAMP(timezone=True), default=datetime.utcnow, nullable=False, index=True)
+    timestamp = Column(TIMESTAMP(timezone=True), default=lambda: datetime.now(UTC), nullable=False, index=True)
     
     # OHLCV data
     open = Column(DECIMAL(20, 8), nullable=False)
