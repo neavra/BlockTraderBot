@@ -190,7 +190,7 @@ class OrderRepository(BaseRepository[OrderModel]):
                 signal_id=db_obj.signal_id,
                 exchange=db_obj.exchange,
                 symbol=db_obj.symbol,
-                order_type=db_obj.order_type,
+                type=db_obj.order_type,
                 side=db_obj.side,
                 price=db_obj.price,
                 size=db_obj.size,
@@ -199,9 +199,7 @@ class OrderRepository(BaseRepository[OrderModel]):
                 filled_size=db_obj.filled_size,
                 average_fill_price=db_obj.average_fill_price,
                 fee=db_obj.fee,
-                created_at=db_obj.created_at,
-                updated_at=db_obj.updated_at,
-                metadata=db_obj.metadata
+                timestamp=db_obj.created_at
             )
         except Exception as e:
             self.logger.error(f"Error converting DB model to domain model: {str(e)}")

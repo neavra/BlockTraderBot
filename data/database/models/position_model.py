@@ -48,7 +48,7 @@ class PositionModel(BaseModel):
     metadata_ = Column(JSON, nullable=True)
     
     # Relationships
-    orders = relationship("OrderModel", back_populates="position")
+    # orders = relationship("OrderModel", back_populates="position")
     
     # Indexes and constraints
     __table_args__ = (

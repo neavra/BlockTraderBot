@@ -14,6 +14,7 @@ from shared.queue.queue_service import QueueService
 from shared.cache.cache_service import CacheService
 from shared.constants import Exchanges, Queues, RoutingKeys
 from shared.domain.dto.order_dto import OrderDto
+from data.database.db import Database
 
 from execution.exchange.exchange_interface import ExchangeInterface
 
@@ -66,6 +67,9 @@ class MonitoringService:
 
         self.config = config or {}
         
+        db_url = config.get('data', {}).get('database', {}).get('database_url', 'postgresql://localhost:5432/trading_bot')
+        self.database = Database(db_url)
+
         self.running = False # Not active yet
         
         self.order_manager = None
@@ -146,8 +150,7 @@ class MonitoringService:
         
         # order_repository = OrderRepository()
 
-        # self.order_manager = OrderManager(order_repository)
-        self.order_manager = OrderManager()
+        self.order_manager = OrderManager(self.database)
         logger.info("Order manager initialized")
     
     async def _init_position_manager(self):

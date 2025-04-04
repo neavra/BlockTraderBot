@@ -44,7 +44,7 @@ class OrderModel(BaseModel):
     
     # Relationships
     signal = relationship("SignalModel", back_populates="orders")
-    position = relationship("PositionModel", back_populates="orders")
+    # position = relationship("PositionModel", back_populates="orders")
     
     # Indexes and constraints
     __table_args__ = (

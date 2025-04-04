@@ -78,7 +78,7 @@ class TeleBot:
     async def orders_command(self, update: Update, context: CallbackContext) -> None:
         """Display active orders when the command /orders is issued."""
         if self.get_orders_func:
-            orders = self.get_orders_func()
+            orders = await self.get_orders_func()
         else:
             logger.error("Orders method not initialised")
         
@@ -112,7 +112,7 @@ class TeleBot:
     async def positions_command(self, update: Update, context: CallbackContext) -> None:
         """Display open positions when the command /positions is issued."""
         if self.get_positions_func:
-            positions = self.get_positions_func()
+            positions = await self.get_positions_func()
         else:
             logger.error("Positions method not initialised")
         
