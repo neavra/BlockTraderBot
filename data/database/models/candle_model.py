@@ -33,18 +33,28 @@ class CandleModel(BaseModel):
     is_closed = Column(Boolean, nullable=False)
     # trades = Column(Integer, nullable=True)  # Number of trades, if available
     
+    # Custom timeframe specific fields
+    is_custom_timeframe = Column(Boolean, default=False, nullable=False, index=True)
+    is_complete = Column(Boolean, default=True, nullable=False)  # Only relevant for custom timeframes
+    source_timeframe = Column(String(5), nullable=True)  # Base timeframe used for custom timeframe
+
     # Indexes and constraints
     __table_args__ = (
         # Composite index for common queries
         Index('idx_exchange_symbol_timeframe', 'exchange', 'symbol', 'timeframe'),
+        
+        # Custom timeframe specific index
+        Index('idx_custom_timeframe', 'is_custom_timeframe', 'is_complete'),
         
         # Ensure unique candles
         UniqueConstraint('exchange', 'symbol', 'timeframe', 'timestamp', name='uq_candle'),
     )
     
     def __repr__(self) -> str:
+        custom_flag = " (Custom)" if self.is_custom_timeframe else ""
+        complete_flag = "" if self.is_complete else " (Partial)"
         return (
-            f"Candle({self.exchange}:{self.symbol}:{self.timeframe}, "
+            f"Candle({self.exchange}:{self.symbol}:{self.timeframe}{custom_flag}{complete_flag}, "
             f"time={self.timestamp}, "
             f"OHLC={self.open}/{self.high}/{self.low}/{self.close}, "
             f"vol={self.volume})"

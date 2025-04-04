@@ -38,7 +38,7 @@ class DataService:
             config: Configuration dictionary
         """
         self.database = Database(db_url=config["data"]["database"]["database_url"])
-        self.candle_manager = CandleManager(database=self.database)
+        self.candle_manager = CandleManager(database=self.database, config=config)
         self.config = config
         
         # Initialize client factories

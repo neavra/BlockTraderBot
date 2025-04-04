@@ -18,7 +18,7 @@ LOGGING_CONFIG = {
             "formatter": "standard",
         },
         "file": {
-            "level": "INFO",
+            "level": "DEBUG",
             "class": "logging.FileHandler",
             "filename": "trading_bot.log",
             "formatter": "standard",

@@ -1,57 +1,258 @@
 {
-    "exchanges": {
-      "hyperliquid": {
-        "testnet": true,
-        "timeout": 5000,
-        "retry_attempts": 3,
-        "default_leverage": 1
-      }
-    },
-    "execution": {
+  "exchanges": {
+    "hyperliquid": {
+      "testnet": true,
+      "timeout": 5000,
+      "retry_attempts": 3,
+      "default_leverage": 1
+    }
+  },
+  "execution": {
     "test_run": true
-    },
-    "logging": {
-      "level": "INFO",
-      "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    },
-    "monitoring":{
-      "telegram":{
-        
-      }
-    },  
-    "data":{
-      "lookback" : 24,
-      "binance":{
-        "symbols": {
-          "BTCUSDT": true, 
-          "ETHUSDT" : true,
-          "XRPUSDT" : true,
-          "SOLUSDT" : false,
-          "DOGEUSDT": false
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  },
+  "monitoring":{
+    "telegram":{
+      
+    }
+  },  
+  "data":{
+    "lookback": 24,
+    "custom_timeframes": {
+      "enabled": true,
+      "mappings": {
+        "2m": {
+          "base_timeframe": "1m",
+          "alignment": {
+            "reference": "epoch",
+            "interval_minutes": 2
+          }
         },
-        "timeframes": {
-          "1m": true,
-          "3m": true,
-          "5m": true,
-          "15m": true,
-          "30m": true,
-          "1h": true, 
-          "2h": true, 
-          "4h": true,
-          "6h": true,
-          "8h": true,
-          "12h": true,
-          "1d": true,
-          "3d": true,
-          "1w": true,
-          "1M": true
+        "4m": {
+          "base_timeframe": "1m",
+          "alignment": {
+            "reference": "epoch",
+            "interval_minutes": 4
+          }
+        },
+        "10m": {
+          "base_timeframe": "1m",
+          "alignment": {
+            "reference": "epoch",
+            "interval_minutes": 10
+          }
+        },
+        "45m": {
+          "base_timeframe": "15m",
+          "alignment": {
+            "reference": "epoch",
+            "interval_minutes": 45
+          }
+        },
+        "2h": {
+          "base_timeframe": "1h",
+          "alignment": {
+            "reference": "midnight",
+            "interval_hours": 2
+          }
+        },
+        "3h": {
+          "base_timeframe": "1h",
+          "alignment": {
+            "reference": "midnight",
+            "interval_hours": 3
+          }
+        },
+        "5h": {
+          "base_timeframe": "1h",
+          "alignment": {
+            "reference": "midnight",
+            "interval_hours": 5
+          }
+        },
+        "7h": {
+          "base_timeframe": "1h",
+          "alignment": {
+            "reference": "midnight",
+            "interval_hours": 7
+          }
+        },
+        "9h": {
+          "base_timeframe": "1h",
+          "alignment": {
+            "reference": "midnight",
+            "interval_hours": 9
+          }
+        },
+        "10h": {
+          "base_timeframe": "1h",
+          "alignment": {
+            "reference": "midnight",
+            "interval_hours": 10
+          }
+        },
+        "11h": {
+          "base_timeframe": "1h",
+          "alignment": {
+            "reference": "midnight",
+            "interval_hours": 11
+          }
+        },
+        "13h": {
+          "base_timeframe": "1h",
+          "alignment": {
+            "reference": "midnight",
+            "interval_hours": 13
+          }
+        },
+        "14h": {
+          "base_timeframe": "1h",
+          "alignment": {
+            "reference": "midnight",
+            "interval_hours": 14
+          }
+        },
+        "15h": {
+          "base_timeframe": "1h",
+          "alignment": {
+            "reference": "midnight",
+            "interval_hours": 15
+          }
+        },
+        "16h": {
+          "base_timeframe": "4h",
+          "alignment": {
+            "reference": "midnight",
+            "interval_hours": 16
+          }
+        },
+        "17h": {
+          "base_timeframe": "1h",
+          "alignment": {
+            "reference": "midnight",
+            "interval_hours": 17
+          }
+        },
+        "18h": {
+          "base_timeframe": "6h",
+          "alignment": {
+            "reference": "midnight",
+            "interval_hours": 18
+          }
+        },
+        "19h": {
+          "base_timeframe": "1h",
+          "alignment": {
+            "reference": "midnight",
+            "interval_hours": 19
+          }
+        },
+        "20h": {
+          "base_timeframe": "4h",
+          "alignment": {
+            "reference": "midnight",
+            "interval_hours": 20
+          }
+        },
+        "21h": {
+          "base_timeframe": "1h",
+          "alignment": {
+            "reference": "midnight",
+            "interval_hours": 21
+          }
+        },
+        "22h": {
+          "base_timeframe": "1h",
+          "alignment": {
+            "reference": "midnight",
+            "interval_hours": 22
+          }
+        },
+        "23h": {
+          "base_timeframe": "1h",
+          "alignment": {
+            "reference": "midnight",
+            "interval_hours": 23
+          }
+        },
+        "2d": {
+          "base_timeframe": "1d",
+          "alignment": {
+            "reference": "week_start",
+            "interval_days": 2
+          }
+        },
+        "4d": {
+          "base_timeframe": "1d",
+          "alignment": {
+            "reference": "week_start",
+            "interval_days": 4
+          }
+        },
+        "5d": {
+          "base_timeframe": "1d",
+          "alignment": {
+            "reference": "week_start",
+            "interval_days": 5
+          }
+        },
+        "6d": {
+          "base_timeframe": "1d",
+          "alignment": {
+            "reference": "week_start",
+            "interval_days": 6
+          }
+        },
+        "2w": {
+          "base_timeframe": "1w",
+          "alignment": {
+            "reference": "month_start",
+            "interval_weeks": 2
+          }
+        },
+        "3w": {
+          "base_timeframe": "1w",
+          "alignment": {
+            "reference": "month_start",
+            "interval_weeks": 3
+          }
         }
-      },
-      "hyperliquid":{
-        
-      },
-      "database":{
-        
       }
+    },
+    "binance": {
+      "symbols": {
+        "BTCUSDT": true, 
+        "ETHUSDT" : false,
+        "XRPUSDT" : false,
+        "SOLUSDT" : false,
+        "DOGEUSDT": false
+      },
+      "timeframes": {
+        "1m": true,
+        "3m": true,
+        "5m": true,
+        "15m": true,
+        "30m": true,
+        "1h": true, 
+        "2h": true, 
+        "4h": true,
+        "6h": true,
+        "8h": true,
+        "12h": true,
+        "1d": true,
+        "3d": true,
+        "1w": true,
+        "1M": true
+      }
+    },
+    "hyperliquid":{
+      
+    },
+    "database":{
+      
     }
   }
+}
