@@ -2,13 +2,12 @@ import json
 import ssl
 import certifi
 import logging
-from managers.candle_manager import CandleManager
 import websockets
 from typing import AsyncGenerator, Tuple, Dict, Any, Optional
 from datetime import datetime
 
 from .base import WebSocketClient
-from .connection_manager import WebSocketConnectionManager
+from managers.candle_manager import CandleManager
 from shared.domain.dto.candle_dto import CandleDto
 
 class BinanceWebSocketClient(WebSocketClient):
@@ -31,29 +30,29 @@ class BinanceWebSocketClient(WebSocketClient):
         self.ssl_context = ssl.create_default_context(cafile=certifi.where())
         self.manager = manager
         
-        # Setup logger
-        self.logger = logging.getLogger(f"BinanceWS_{symbol}_{interval}")
-        self.setup_logger()
+        # Create connection factory for WebSocketClient
+        connection_factory = lambda: websockets.connect(self.url, ssl=self.ssl_context)
         
-        # Create connection manager
-        self.connection_manager = WebSocketConnectionManager(
-            connection_factory=lambda: websockets.connect(self.url, ssl=self.ssl_context),
+        # Initialize the base class with connection parameters
+        super().__init__(
+            connection_factory=connection_factory,
             max_retries=10,
-            retry_delay=5.0,
-            logger=self.logger
+            retry_delay=5.0
         )
     
-    def setup_logger(self):
+    def setup_logger(self) -> logging.Logger:
         """Configure the logger for this WebSocket client."""
-        if not self.logger.handlers:
+        logger = logging.getLogger(f"BinanceWS_{self.symbol}_{self.interval}")
+        if not logger.handlers:
             handler = logging.StreamHandler()
             formatter = logging.Formatter(
                 '[%(asctime)s] %(levelname)s - %(message)s',
                 datefmt='%Y-%m-%d %H:%M:%S'
             )
             handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
-            self.logger.setLevel(logging.INFO)
+            logger.addHandler(handler)
+            logger.setLevel(logging.INFO)
+        return logger
     
     def parse_binance_kline(self, data: Dict) -> Tuple[Dict, bool]:
         """
@@ -91,7 +90,8 @@ class BinanceWebSocketClient(WebSocketClient):
         Yields:
             Tuple containing (raw_candle_data, is_candle_closed)
         """
-        ws = await self.connection_manager.connect()
+        # Use the connect method from the base class
+        ws = await self.connect()
         
         try:
             async for message in ws:
@@ -101,11 +101,14 @@ class BinanceWebSocketClient(WebSocketClient):
                 
         except websockets.exceptions.ConnectionClosed:
             self.logger.warning("WebSocket connection closed. Reconnecting...")
-            await self.fetch_candlestick_data()
+            # Call self to restart the generator with a new connection
+            async for result in self.fetch_candlestick_data():
+                yield result
             
         except Exception as e:
             self.logger.error(f"Error in WebSocket stream: {str(e)}")
-            await self.connection_manager.disconnect()
+            # Call disconnect from the base class
+            await self.disconnect()
             raise
     
     async def listen(self):
@@ -127,5 +130,5 @@ class BinanceWebSocketClient(WebSocketClient):
                     
         except Exception as e:
             self.logger.error(f"Error in WebSocket listener: {str(e)}")
-            await self.connection_manager.disconnect()
+            await self.disconnect()
             raise
