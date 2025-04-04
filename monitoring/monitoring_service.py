@@ -173,8 +173,8 @@ class MonitoringService:
             )
 
             self.telegram_bot.set_data_providers(
-                    self.get_all_orders,
-                    self.get_all_positions
+                    self.order_manager.get_all_orders,
+                    self.position_manager.get_all_positions
                 )
             await self._run_telegram_bot()
 
@@ -239,14 +239,6 @@ class MonitoringService:
         )
         
         logger.info("Signal event producer initialized")
-    
-    # This method is called by the telegram bot, which wraps the call to the position manager
-    def get_all_positions(self):
-        return self.position_manager.get_all_positions()
-    
-    # This method is called by the telegram bot, which wraps the call to the order manager
-    def get_all_orders(self):
-        return self.order_manager.get_all_orders()
     
     # This method is binded to the queue, and the callback is registered here when receiving an event
     # On event, it should get the data from the cache, and check_order_status persistently
