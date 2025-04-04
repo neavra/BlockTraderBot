@@ -7,7 +7,7 @@ from data.logs.logging import setup_logging
 from config.config_loader import load_config
 from connectors.websocket.factory import WebSocketClientFactory
 from connectors.rest.factory import RestClientFactory
-from connectors.rest.binance_rest import BinanceRestClient
+from connectors.rest import RestClient
 from database.db import Database
 from managers.candle_manager import CandleManager
 from utils.concurrency import gather_with_concurrency
@@ -208,7 +208,7 @@ class DataService:
         
         logger.info("Initial historical data loading completed")
     
-    async def _fetch_initial_history(self, rest_client: BinanceRestClient, lookback_period: int = 720) -> None:
+    async def _fetch_initial_history(self, rest_client: RestClient, lookback_period: int = 720) -> None:
         """
         Fetch initial historical data for a specific symbol/timeframe.
         

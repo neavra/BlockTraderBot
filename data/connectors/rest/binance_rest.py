@@ -18,7 +18,8 @@ class BinanceRestClient(RestClient):
     
     def __init__(
         self, 
-        symbol: str, 
+        symbol: str,
+        exchange : str, 
         interval: str, 
         base_url: Optional[str] = None
     ):
@@ -33,7 +34,7 @@ class BinanceRestClient(RestClient):
         """
         self.base_url = base_url or os.getenv("BINANCE_API_URL", "https://api.binance.com/api/v3/klines")
         self.symbol = symbol.upper()
-        self.exchange = "binance"
+        self.exchange = exchange
         self.interval = interval
         self.ssl_context = ssl.create_default_context(cafile=certifi.where())
         self.logger = logging.getLogger(f"BinanceREST_{symbol}_{interval}")

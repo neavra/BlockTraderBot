@@ -13,12 +13,12 @@ LOGGING_CONFIG = {
     },
     "handlers": {
         "console": {
-            "level": "DEBUG",
+            "level": "INFO",
             "class": "logging.StreamHandler",
             "formatter": "standard",
         },
         "file": {
-            "level": "DEBUG",
+            "level": "INFO",
             "class": "logging.FileHandler",
             "filename": "trading_bot.log",
             "formatter": "standard",

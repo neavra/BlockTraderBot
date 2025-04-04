@@ -41,6 +41,7 @@ class RestClientFactory:
         
         client_class = cls._clients[exchange]
         return client_class(symbol=symbol, 
+                            exchange=exchange,
                             interval=interval, 
                             **kwargs)
     
