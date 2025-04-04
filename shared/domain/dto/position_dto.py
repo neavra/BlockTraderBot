@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 @dataclass
 class PositionDto:
+    id: str
     symbol: str
     side: str
     size: float

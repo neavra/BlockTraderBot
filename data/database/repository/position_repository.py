@@ -201,24 +201,14 @@ class PositionRepository(BaseRepository[PositionModel]):
         try:
             return PositionDto(
                 id=db_obj.id,
-                exchange=db_obj.exchange,
                 symbol=db_obj.symbol,
                 side=db_obj.side,
                 size=db_obj.size,
                 entry_price=db_obj.entry_price,
                 current_price=db_obj.current_price,
-                liquidation_price=db_obj.liquidation_price,
-                stop_loss=db_obj.stop_loss,
-                take_profit=db_obj.take_profit,
                 pnl=db_obj.pnl,
                 pnl_percent=db_obj.pnl_percent,
-                status=db_obj.status,
-                leverage=db_obj.leverage,
-                entry_time=db_obj.entry_time,
-                exit_time=db_obj.exit_time,
-                created_at=db_obj.created_at,
-                updated_at=db_obj.updated_at,
-                metadata=db_obj.metadata
+                timestamp=db_obj.created_at
             )
         except Exception as e:
             self.logger.error(f"Error converting DB model to domain model: {str(e)}")

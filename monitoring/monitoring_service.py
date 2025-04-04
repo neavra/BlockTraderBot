@@ -148,8 +148,6 @@ class MonitoringService:
         """Initialize the order manager for tracking order status and history."""
         logger.info("Initializing order manager...")
         
-        # order_repository = OrderRepository()
-
         self.order_manager = OrderManager(self.database)
         logger.info("Order manager initialized")
     
@@ -157,10 +155,7 @@ class MonitoringService:
         """Initialize the position manager for tracking active positions."""
         logger.info("Initializing position manager...")
         
-        # position_repository = PositionRepository()
-
-        # self.position_manager = PositionManager(position_repository)
-        self.position_manager = PositionManager()
+        self.position_manager = PositionManager(self.database)
         logger.info("Position manager initialized")
     
     async def _init_alert_manager(self):
