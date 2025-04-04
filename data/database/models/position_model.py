@@ -45,7 +45,7 @@ class PositionModel(BaseModel):
     updated_at = Column(TIMESTAMP(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC), nullable=False)
     
     # Additional metadata stored as JSON
-    metadata = Column(JSON, nullable=True)
+    metadata_ = Column(JSON, nullable=True)
     
     # Relationships
     orders = relationship("OrderModel", back_populates="position")
@@ -89,7 +89,7 @@ class PositionModel(BaseModel):
             "exit_time": self.exit_time.isoformat() if self.exit_time else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "metadata": self.metadata
+            "metadata_": self.metadata_
         }
     
     @classmethod
@@ -114,7 +114,7 @@ class PositionModel(BaseModel):
             exit_time=data.get("exit_time"),
             created_at=data.get("created_at"),
             updated_at=data.get("updated_at"),
-            metadata=data.get("metadata", {})
+            metadata_=data.get("metadata_", {})
         )
     
     def update_pnl(self, current_price):

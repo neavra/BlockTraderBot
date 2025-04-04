@@ -40,14 +40,15 @@ class SignalModel(BaseModel):
     updated_at = Column(TIMESTAMP(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC), nullable=False)
     
     # Additional metadata
-    metadata = Column(JSON, nullable=True)
+    metadata_ = Column(JSON, nullable=True)
     
     # Relationships - this doesn't require orders to exist
     orders = relationship("OrderModel", back_populates="signal")
     
+    indicator_id = Column(Integer, nullable=True)
     # Optional reference to an indicator (like an order block)
-    indicator_id = Column(Integer, ForeignKey("indicators.id"), nullable=True)
-    indicator = relationship("IndicatorModel")
+    #indicator_id = Column(Integer, ForeignKey("indicators.id"), nullable=True)
+    #indicator = relationship("IndicatorModel")
     
     # Indexes
     __table_args__ = (
@@ -83,7 +84,7 @@ class SignalModel(BaseModel):
             "execution_status": self.execution_status,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "metadata": self.metadata,
+            "metadata_": self.metadata_,
             "indicator_id": self.indicator_id
         }
     
@@ -106,6 +107,6 @@ class SignalModel(BaseModel):
             execution_status=data.get("execution_status", "pending"),
             created_at=data.get("created_at"),
             updated_at=data.get("updated_at"),
-            metadata=data.get("metadata", {}),
+            metadata_=data.get("metadata_", {}),
             indicator_id=data.get("indicator_id")
         )
