@@ -42,9 +42,8 @@ class RoutingKeys:
 # Cache-related constants
 class CacheKeys:
     # Market data
-    LATEST_CANDLE = "candle:{exchange}:{symbol}:{timeframe}:latest"
-    CANDLE_HISTORY_SET = "candle:{exchange}:{symbol}:{timeframe}:history"
-    CANDLE_DATA = "candle:{exchange}:{symbol}:{timeframe}:{timestamp}"
+    CANDLE_HISTORY_REST_API_DATA = "historical:candle:{exchange}:{symbol}:{timeframe}"
+    CANDLE_LIVE_WEBSOCKET_DATA = "live:candle:{exchange}:{symbol}:{timeframe}"
     
     # Order blocks
     ORDER_BLOCK = "ob:{exchange}:{symbol}:{timeframe}:{id}"

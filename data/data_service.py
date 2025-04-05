@@ -246,6 +246,11 @@ class DataService:
                 
                 logger.info(f"Loaded {len(normalized_candles)} historical candles for {rest_client.symbol}/{rest_client.interval}")
             
+            self.candle_manager.mark_historical_complete(
+                exchange=rest_client.exchange,
+                symbol=rest_client.symbol,
+                timeframe=rest_client.interval
+            )
             logger.info(f"Completed historical data loading for {rest_client.symbol}/{rest_client.interval}")
             
         except Exception as e:

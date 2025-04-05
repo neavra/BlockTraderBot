@@ -3,18 +3,20 @@ import json
 import logging
 from typing import Dict, Any, List, Optional
 from dataclasses import asdict
+from datetime import datetime
 
+from data.utils.helper import DateTimeEncoder
 from normalizer.base import Normalizer
 from shared.cache.cache_service import CacheService
 from database.db import Database
 from consumer.candle_consumer import CandleConsumer
-from shared.constants import Exchanges, Queues, RoutingKeys
+from shared.constants import Exchanges, Queues, RoutingKeys, CacheKeys
 from shared.queue.queue_service import QueueService
 
 from .base import BaseManager
 from shared.domain.dto.candle_dto import CandleDto
 from normalizer.factory import NormalizerFactory
-from shared.domain.events.market_events import CandleClosedEvent, CandleUpdatedEvent
+from shared.domain.events.candle_closed_event import CandleClosedEvent
 
 from aggregators.candle_aggregator import CandleAggregator
 from .state_manager import StateManager
@@ -51,6 +53,7 @@ class CandleManager(BaseManager):
                 config=config
             )
         
+        self.historical_complete = {}
         # Keep track of normalizers by exchange
         self.websocket_normalizers = {}
         self.rest_normalizers = {}
@@ -211,17 +214,42 @@ class CandleManager(BaseManager):
             normalizer = self._get_websocket_normalizer(exchange)
             
             # Normalize the data
-            normalized_candle = await normalizer.normalize_websocket_data(data)
+            normalized_candle: CandleDto = await normalizer.normalize_websocket_data(data)
             
             self.logger.info(f"Normalized Candle: {normalized_candle}")
             
             # Process standard timeframe candle
             if is_closed:
                 await self._process_standard_candle(normalized_candle, normalizer)
+                normalized_candle_json = json.dumps(asdict(normalized_candle), cls=DateTimeEncoder)
+                # Cache key for this candle
+                cache_key = CacheKeys.CANDLE_LIVE_WEBSOCKET_DATA
+
+                score = normalized_candle.timestamp.timestamp() if isinstance(normalized_candle.timestamp, datetime) else float(normalized_candle.timestamp)
+
+                # Add to cache as a sorted set. Cache Key contains a sorted set of candles, sorted by timestamp
+                self.candle_cache.add_to_sorted_set(
+                    name=cache_key,
+                    value=normalized_candle_json,
+                    score=score
+                )
+                self.logger.debug("Successfully stored closed candle to cache")
+
+                # Convert event to JSON and publish event to Strategy Layer. Only publish live events once historical data is caught up
+                market_key = f"{normalized_candle.exchange}:{normalized_candle.symbol}:{normalized_candle.timeframe}"
+                historical_done = self.historical_complete.get(market_key, False)
+                if historical_done:
+                    candle_event = CandleClosedEvent.to_event(normalized_candle, "live")
+                    self.producer_event_queue.publish(
+                        exchange=Exchanges.MARKET_DATA, 
+                        routing_key=RoutingKeys.DATA_EVENT_HANDLE, 
+                        message=json.dumps(asdict(candle_event), cls=DateTimeEncoder)
+                    )
+                    self.logger.debug("Successfully published candle closed event to candle event queue")
             
             # Process custom timeframes if enabled
-            if self.custom_timeframes_enabled:
-                await self._process_custom_timeframes(normalized_candle)
+            # if self.custom_timeframes_enabled:
+            #     await self._process_custom_timeframes(normalized_candle)
                 
         except Exception as e:
             self.logger.error(f"Error handling WebSocket data: {e}")
@@ -253,17 +281,39 @@ class CandleManager(BaseManager):
             # Process each candle in the list
             for data in data_list:
                 # Normalize the data
-                normalized_candle = await normalizer.normalize_rest_data(
+                normalized_candle: CandleDto = await normalizer.normalize_rest_data(
                     data=data, exchange=exchange, symbol=symbol, interval=interval
                 )
                 
-                # Process standard timeframe candle
+                # Process standard timeframe candle only if closed, ignore opened candles
                 if normalized_candle.is_closed:
                     await self._process_standard_candle(normalized_candle, normalizer)
+                    normalized_candle_json = json.dumps(asdict(normalized_candle), cls=DateTimeEncoder)
+                    # Cache key for this candle
+                    cache_key = CacheKeys.CANDLE_HISTORY_REST_API_DATA
+
+                    score = normalized_candle.timestamp.timestamp() if isinstance(normalized_candle.timestamp, datetime) else float(normalized_candle.timestamp)
+    
+                    # Add to cache as a sorted set. Cache Key contains a sorted set of candles, sorted by timestamp
+                    self.candle_cache.add_to_sorted_set(
+                        name=cache_key,
+                        value=normalized_candle_json,
+                        score=score
+                    )
+                    self.logger.debug("Successfully stored closed candle to cache")
+
+                    # Convert event to JSON and publish event to Strategy Layer
+                    candle_event = CandleClosedEvent.to_event(normalized_candle, "historical")
+                    self.producer_event_queue.publish(
+                        exchange=Exchanges.MARKET_DATA, 
+                        routing_key=RoutingKeys.DATA_EVENT_HANDLE, 
+                        message=json.dumps(asdict(candle_event), cls=DateTimeEncoder)
+                    )
+                    self.logger.debug("Successfully published candle closed event to candle event queue")
                 
                 # Process custom timeframes if enabled
-                if self.custom_timeframes_enabled:
-                    await self._process_custom_timeframes(normalized_candle)
+                # if self.custom_timeframes_enabled:
+                #     await self._process_custom_timeframes(normalized_candle)
                 
                 normalized_data_list.append(normalized_candle)
                 
@@ -285,11 +335,8 @@ class CandleManager(BaseManager):
         """
         # Convert to JSON for storage/publishing
         normalized_candle_json = normalizer.to_json(candle)
-        
-        # Cache key for this candle
-        cache_key = f"{candle.exchange}:{candle.symbol}:{candle.timeframe}"
-        
-        # Candle is closed - publish to the queue for processing
+
+        # Candle is closed - publish to the queue to insert into the database
         self.logger.info(f"Closed candle: {candle.exchange}, Symbol: {candle.symbol}, Timeframe: {candle.timeframe}")
         self.producer_candle_queue.publish(
             exchange=Exchanges.MARKET_DATA, 
@@ -298,18 +345,6 @@ class CandleManager(BaseManager):
         )
         self.logger.debug("Successfully published candle to candle producer queue")
         
-        # Add to cache
-        self.candle_cache.set(cache_key, normalized_candle_json)
-        self.logger.debug("Successfully stored closed candle to cache")
-
-        # Convert event to JSON and publish
-        candle_event = normalizer.to_json(CandleClosedEvent(candle=candle))
-        self.producer_event_queue.publish(
-            exchange=Exchanges.MARKET_DATA, 
-            routing_key=RoutingKeys.DATA_EVENT_HANDLE, 
-            message=candle_event
-        )
-        self.logger.debug("Successfully published candle closed event to candle event queue")
     
     async def _process_custom_timeframes(self, standard_candle: CandleDto) -> None:
         """
@@ -384,3 +419,17 @@ class CandleManager(BaseManager):
             raise  # Re-raise to properly propagate cancellation
         except Exception as e:
             self.logger.error(f"Async processing error: {str(e)}")
+
+    def mark_historical_complete(self, exchange: str, symbol: str, timeframe: str) -> None:
+        """
+        Mark historical data loading as complete for a specific market.
+        
+        Args:
+            exchange: Exchange name
+            symbol: Trading symbol
+            timeframe: Candle timeframe
+        """
+        key = f"{exchange}:{symbol}:{timeframe}"
+        self.historical_complete[key] = True
+        self.logger.info(f"Historical data marked complete for {exchange}:{symbol}:{timeframe}")
+        
