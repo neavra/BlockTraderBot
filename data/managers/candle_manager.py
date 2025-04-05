@@ -221,19 +221,10 @@ class CandleManager(BaseManager):
             # Process standard timeframe candle
             if is_closed:
                 await self._process_standard_candle(normalized_candle, normalizer)
-                normalized_candle_json = json.dumps(asdict(normalized_candle), cls=DateTimeEncoder)
                 # Cache key for this candle
                 cache_key = CacheKeys.CANDLE_LIVE_WEBSOCKET_DATA
 
-                score = normalized_candle.timestamp.timestamp() if isinstance(normalized_candle.timestamp, datetime) else float(normalized_candle.timestamp)
-
-                # Add to cache as a sorted set. Cache Key contains a sorted set of candles, sorted by timestamp
-                self.candle_cache.add_to_sorted_set(
-                    name=cache_key,
-                    value=normalized_candle_json,
-                    score=score
-                )
-                self.logger.debug("Successfully stored closed candle to cache")
+                await self._cache_candle(candle=normalized_candle,cache_key=cache_key)
 
                 # Convert event to JSON and publish event to Strategy Layer. Only publish live events once historical data is caught up
                 market_key = f"{normalized_candle.exchange}:{normalized_candle.symbol}:{normalized_candle.timeframe}"
@@ -288,19 +279,9 @@ class CandleManager(BaseManager):
                 # Process standard timeframe candle only if closed, ignore opened candles
                 if normalized_candle.is_closed:
                     await self._process_standard_candle(normalized_candle, normalizer)
-                    normalized_candle_json = json.dumps(asdict(normalized_candle), cls=DateTimeEncoder)
                     # Cache key for this candle
                     cache_key = CacheKeys.CANDLE_HISTORY_REST_API_DATA
-
-                    score = normalized_candle.timestamp.timestamp() if isinstance(normalized_candle.timestamp, datetime) else float(normalized_candle.timestamp)
-    
-                    # Add to cache as a sorted set. Cache Key contains a sorted set of candles, sorted by timestamp
-                    self.candle_cache.add_to_sorted_set(
-                        name=cache_key,
-                        value=normalized_candle_json,
-                        score=score
-                    )
-                    self.logger.debug("Successfully stored closed candle to cache")
+                    await self._cache_candle(candle=normalized_candle,cache_key=cache_key)
 
                     # Convert event to JSON and publish event to Strategy Layer
                     candle_event = CandleClosedEvent.to_event(normalized_candle, "historical")
@@ -323,6 +304,18 @@ class CandleManager(BaseManager):
             self.logger.error(f"Error handling REST data: {e}")
             return []
     
+    async def _cache_candle(self, candle: CandleDto, cache_key: str):
+        score = candle.timestamp.timestamp() if isinstance(candle.timestamp, datetime) else float(candle.timestamp)
+        normalized_candle_json = json.dumps(asdict(candle), cls=DateTimeEncoder)
+                    
+        # Add to cache as a sorted set. Cache Key contains a sorted set of candles, sorted by timestamp
+        self.candle_cache.add_to_sorted_set(
+            name=cache_key,
+            value=normalized_candle_json,
+            score=score
+        )
+        self.logger.debug("Successfully stored closed candle to cache")
+
     async def _process_standard_candle(self, candle: CandleDto,normalizer: Normalizer) -> None:
         """
         Process a standard timeframe candle.
