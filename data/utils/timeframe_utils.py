@@ -78,23 +78,14 @@ def get_reference_timestamp(reference: str, close_timestamp: datetime, timeframe
     Get a reference timestamp based on the reference type, adjusted for close timestamp.
     
     Args:
-        reference: Reference type ('epoch', 'midnight', 'week_start', 'month_start')
+        reference: Reference type ('epoch', 'midnight', 'week_start', 'month_start', 'day_boundary')
         close_timestamp: Closing timestamp of the candle
         timeframe: Timeframe of the candle (to adjust reference date if needed)
         
     Returns:
         Reference datetime
     """
-    # For close timestamps, we may need to adjust the date
-    # Check if this is a potential edge case (close to midnight)
-    is_close_to_midnight = close_timestamp.hour == 23 and close_timestamp.minute >= 55
-    
-    # For timeframes that end at midnight, use the next day as reference
-    if is_close_to_midnight and timeframe and any(tf in timeframe for tf in ['h', 'd', 'w']):
-        # Use the next day as the reference date
-        reference_date = (close_timestamp + timedelta(days=1)).date()
-    else:
-        reference_date = close_timestamp.date()
+    reference_date = close_timestamp.date()
         
     if reference == 'epoch':
         # Unix epoch: January 1, 1970, at 00:00:00 UTC
@@ -114,8 +105,29 @@ def get_reference_timestamp(reference: str, close_timestamp: datetime, timeframe
         # Start of the month (1st day 00:00 UTC)
         return datetime(reference_date.year, reference_date.month, 1, tzinfo=timezone.utc)
     
+    elif reference == 'day_boundary':
+        # For timeframes that need to respect the day boundary (intraday timeframes)
+        return datetime.combine(reference_date, time(0, 0), tzinfo=timezone.utc)
+    
     else:
         raise ValueError(f"Unknown reference type: {reference}")
+
+
+def is_intraday_timeframe(timeframe_str: str) -> bool:
+    """
+    Determine if a timeframe is intraday (less than 1 day).
+    
+    Args:
+        timeframe_str: Timeframe string (e.g., '2h', '4h', '1d')
+        
+    Returns:
+        True if intraday, False otherwise
+    """
+    if not timeframe_str:
+        return False
+        
+    # Check if the timeframe ends with 'm' or 'h'
+    return timeframe_str.endswith('m') or timeframe_str.endswith('h')
 
 
 def calculate_candle_boundaries(close_timestamp: datetime, 
@@ -133,50 +145,73 @@ def calculate_candle_boundaries(close_timestamp: datetime,
     """
     # Get alignment configuration
     alignment = timeframe_config['alignment']
-    reference_type = alignment['reference']
-    base_timeframe = timeframe_config.get('base_timeframe', '1m')
+    reference_type = alignment.get('reference', 'midnight')
+    timeframe_str = timeframe_config.get('timeframe', '1m')
     
-    # Get reference timestamp with adjusted logic for close times
+    # Parse the timeframe
+    value, unit = parse_timeframe(timeframe_str)
+    
+    # For intraday timeframes, use day_boundary reference
+    if is_intraday_timeframe(timeframe_str):
+        reference_type = 'day_boundary'
+    
+    # Get reference timestamp
     reference_timestamp = get_reference_timestamp(
-        reference_type, close_timestamp, base_timeframe
+        reference_type, close_timestamp, timeframe_str
     )
     
     # Determine interval in milliseconds
     interval_ms = 0
-    if 'interval_minutes' in alignment:
-        interval_ms = alignment['interval_minutes'] * 60 * 1000
-    elif 'interval_hours' in alignment:
-        interval_ms = alignment['interval_hours'] * 60 * 60 * 1000
-    elif 'interval_days' in alignment:
-        interval_ms = alignment['interval_days'] * 24 * 60 * 60 * 1000
-    elif 'interval_weeks' in alignment:
-        interval_ms = alignment['interval_weeks'] * 7 * 24 * 60 * 60 * 1000
+    
+    if unit == 'minutes':
+        # Minute-based timeframe
+        interval_ms = value * 60 * 1000
+    elif unit == 'hours':
+        # Hour-based timeframe
+        interval_ms = value * 60 * 60 * 1000
+    elif unit == 'days':
+        # Day-based timeframe
+        interval_ms = value * 24 * 60 * 60 * 1000
+    elif unit == 'weeks':
+        # Week-based timeframe
+        interval_ms = value * 7 * 24 * 60 * 60 * 1000
     else:
-        raise ValueError("No interval found in alignment configuration")
+        raise ValueError(f"Unsupported timeframe unit: {unit}")
     
     # Calculate elapsed milliseconds since reference
     close_ts_ms = int(close_timestamp.timestamp() * 1000)
     reference_ms = int(reference_timestamp.timestamp() * 1000)
     elapsed_ms = close_ts_ms - reference_ms
     
-    # For a close timestamp, we need to find which interval it belongs to
+    # For a close timestamp, find which interval it belongs to
     intervals = elapsed_ms // interval_ms
     
-    # Calculate start and end timestamps for this interval
+    # Calculate start timestamp for this interval
     start_ms = reference_ms + (intervals * interval_ms)
-    end_ms = start_ms + interval_ms - 1  # End is inclusive
+    
+    # Handle special case for intraday timeframes
+    if is_intraday_timeframe(timeframe_str):
+        # For intraday timeframes, check if we need to handle day boundary truncation
+        day_boundary_ms = reference_ms + (24 * 60 * 60 * 1000) - 1  # End of the day (23:59:59.999)
+        
+        # Calculate tentative end timestamp
+        tentative_end_ms = start_ms + interval_ms - 1
+        
+        # If this would cross the day boundary, truncate it
+        if tentative_end_ms > day_boundary_ms:
+            end_ms = day_boundary_ms
+        else:
+            end_ms = tentative_end_ms
+    else:
+        # For multi-day timeframes, use continuous intervals without special truncation
+        end_ms = start_ms + interval_ms - 1
     
     # Convert back to datetime
     start_time = datetime.fromtimestamp(start_ms / 1000, tz=timezone.utc)
     end_time = datetime.fromtimestamp(end_ms / 1000, tz=timezone.utc)
     
-    # Check if the close time is exactly at the interval boundary
-    if close_ts_ms == end_ms + 1:
-        # This candle closes exactly at the end of the interval
-        # Make sure we assign it to the correct interval
-        pass  # The calculation already handles this correctly
-    
     return start_time, end_time
+
 
 def get_base_timeframe_for_custom(custom_timeframe: str, config: Dict[str, Any]) -> Optional[str]:
     """
