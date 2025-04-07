@@ -1,9 +1,8 @@
-# strategy/strategies/base.py
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Union, float
 
 from strategy.indicators.base import Indicator
-from strategy.signals.model import Signal
+from shared.domain.dto.signal_dto import Signal
 
 class Strategy(ABC):
     """
@@ -33,6 +32,20 @@ class Strategy(ABC):
             
         Returns:
             Signal object if a trading signal is generated, None otherwise
+        """
+        pass
+    
+    @abstractmethod
+    def calculate_signal_strength(self, signal_data: Dict[str, Any]) -> float:
+        """
+        Calculate the strength of a generated signal
+        
+        Args:
+            signal_data: Dictionary containing signal parameters and metrics
+            
+        Returns:
+            Signal strength as a float value between 0.0 and 1.0,
+            where 0.0 represents lowest strength and 1.0 represents highest strength
         """
         pass
     
