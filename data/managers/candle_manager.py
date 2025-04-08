@@ -27,18 +27,18 @@ class CandleManager(BaseManager):
     Manager for candle data processing.
     Handles the flow of data from connectors to consumers.
     """
-    def __init__(self, database: Database, config: Dict[str, Any]):
+    def __init__(self, candle_consumer: CandleConsumer, config: Dict[str, Any]):
         """
         Initialize the candle manager.
         
         Args:
-            database : Database Instance
+            candle_consumer : Candle Consumer Instance
+            config: Global Configuration dictionary
         """
         self.producer_candle_queue = QueueService()
         self.producer_event_queue = QueueService()
-        self.consumer_candle_queue = QueueService()
         self.candle_cache = CacheService()
-        self.candle_consumer = CandleConsumer(database=database)
+        self.candle_consumer = candle_consumer
         self.logger = logging.getLogger("CandleManager")
 
         self.config = config
@@ -73,7 +73,6 @@ class CandleManager(BaseManager):
 
         # Initialise the producer and consumers for the Candle Queue:
         await self._init_candle_producer()
-        await self._init_candle_consumer()
 
         # Intialise Candle Consumer:
         await self.candle_consumer.initialize()
@@ -123,9 +122,6 @@ class CandleManager(BaseManager):
         if self.producer_event_queue:
             self.producer_event_queue.stop()
         
-        if self.consumer_candle_queue:
-            self.consumer_candle_queue.stop()
-        
         if self.candle_cache:
             self.candle_cache.close()
         
@@ -144,20 +140,6 @@ class CandleManager(BaseManager):
             routing_key=RoutingKeys.CANDLE_ALL
         )
         self.logger.info("Initialised Candle Producer Queue")
-    
-    async def _init_candle_consumer(self):
-        self.consumer_candle_queue.declare_exchange(Exchanges.MARKET_DATA)
-        self.consumer_candle_queue.declare_queue(Queues.CANDLES)
-        self.consumer_candle_queue.bind_queue(
-            exchange=Exchanges.MARKET_DATA,
-            queue=Queues.CANDLES,
-            routing_key=RoutingKeys.CANDLE_ALL
-        )
-        self.consumer_candle_queue.subscribe(
-            queue=Queues.CANDLES,
-            callback=self.on_candle
-        )
-        self.logger.info("Initialised Candle Consumer Queue")
 
     async def _init_event_producer(self):
         self.producer_event_queue.declare_exchange(Exchanges.MARKET_DATA)
@@ -382,44 +364,6 @@ class CandleManager(BaseManager):
                 
         except Exception as e:
             self.logger.error(f"Error processing custom timeframes: {e}")
-    
-    def on_candle(self, candle):
-        """Synchronous callback that schedules async work"""
-        # Log receipt of the event synchronously
-        self.logger.info(f"Received event: {candle}")
-        
-        try:
-            # Use run_coroutine_threadsafe to schedule the async task from this thread
-            # This requires having a reference to the main event loop
-            task = asyncio.run_coroutine_threadsafe(
-                self._process_event_async(candle), 
-                self.main_loop  # You need to store the main loop as an instance variable
-            )
-
-            # Track the task future
-            self.event_tasks.add(task)
-
-            def _remove_task(future):
-                self.event_tasks.discard(future)
-            task.add_done_callback(_remove_task)
-        except Exception as e:
-            self.logger.error(f"Error scheduling candle processing: {str(e)}")
-    
-    async def _process_event_async(self, candle):
-        """Async method that handles the actual processing"""
-        try: 
-            self.logger.info(f"Received candle: {candle}")
-            if self.candle_consumer:
-                candleDto = CandleDto(**candle)
-                await self.candle_consumer.process_item(candle=candleDto)
-                self.logger.info(f"Candle consumed by consumer: {candleDto}")
-
-        except asyncio.CancelledError:
-            # Handle cancellation gracefully
-            self.logger.debug("Candle processing was cancelled")
-            raise  # Re-raise to properly propagate cancellation
-        except Exception as e:
-            self.logger.error(f"Async processing error: {str(e)}")
 
     def mark_historical_complete(self, exchange: str, symbol: str, timeframe: str) -> None:
         """

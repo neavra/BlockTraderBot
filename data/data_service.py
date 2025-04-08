@@ -3,6 +3,7 @@ import logging
 import time
 from typing import Dict, List, Any, Optional
 
+from consumer.candle_consumer import CandleConsumer
 from data.logs.logging import setup_logging
 from config.config_loader import load_config
 from connectors.websocket.factory import WebSocketClientFactory
@@ -10,6 +11,7 @@ from connectors.rest.factory import RestClientFactory
 from connectors.rest import RestClient
 from database.db import Database
 from managers.candle_manager import CandleManager
+from shared.queue.queue_service import QueueService
 from utils.concurrency import gather_with_concurrency
 
 logger = logging.getLogger(__name__)
@@ -38,7 +40,9 @@ class DataService:
             config: Configuration dictionary
         """
         self.database = Database(db_url=config["data"]["database"]["database_url"])
-        self.candle_manager = CandleManager(database=self.database, config=config)
+        self.consumer_candle_queue = QueueService()
+        self.candle_consumer = CandleConsumer(database=self.database, consumer_candle_queue=self.consumer_candle_queue)
+        self.candle_manager = CandleManager(candle_consumer=self.candle_consumer, config=config)
         self.config = config
         
         # Initialize client factories
