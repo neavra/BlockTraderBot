@@ -222,7 +222,11 @@ class CandleManager(BaseManager):
             if is_closed:
                 await self._process_standard_candle(normalized_candle, normalizer)
                 # Cache key for this candle
-                cache_key = CacheKeys.CANDLE_LIVE_WEBSOCKET_DATA
+                cache_key = CacheKeys.CANDLE_LIVE_WEBSOCKET_DATA.format(
+                    exchange=self.config.get('exchange', 'default'),
+                    symbol=normalized_candle.symbol,
+                    timeframe=normalized_candle.timeframe
+                )
 
                 await self._cache_candle(candle=normalized_candle,cache_key=cache_key)
 
@@ -280,7 +284,11 @@ class CandleManager(BaseManager):
                 if normalized_candle.is_closed:
                     await self._process_standard_candle(normalized_candle, normalizer)
                     # Cache key for this candle
-                    cache_key = CacheKeys.CANDLE_HISTORY_REST_API_DATA
+                    cache_key = CacheKeys.CANDLE_HISTORY_REST_API_DATA.format(
+                    exchange=self.config.get('exchange', 'default'),
+                    symbol=symbol,
+                    timeframe=interval
+                )
                     await self._cache_candle(candle=normalized_candle,cache_key=cache_key)
 
                     # Convert event to JSON and publish event to Strategy Layer
