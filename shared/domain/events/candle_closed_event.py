@@ -14,9 +14,10 @@ class CandleClosedEvent(BaseEvent):
     exchange: str
     timeframe: str
     timestamp: Union[datetime ,str]
+    source: str
 
     @classmethod
-    def to_event(candle_dto: CandleDto, data_type: str) -> 'CandleClosedEvent':
+    def to_event(cls, candle_dto: CandleDto, data_type: str) -> 'CandleClosedEvent':
         """
         Convert a CandleDto to a CandleClosedEvent.
         
