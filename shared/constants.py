@@ -44,6 +44,7 @@ class CacheKeys:
     # Market data
     CANDLE_HISTORY_REST_API_DATA = "historical:candle:{exchange}:{symbol}:{timeframe}"
     CANDLE_LIVE_WEBSOCKET_DATA = "live:candle:{exchange}:{symbol}:{timeframe}"
+    CANDLE_LAST_UPDATED = "candle:last_updated:{exchange}:{symbol}:{timeframe}"
     
     # Order blocks
     ORDER_BLOCK = "ob:{exchange}:{symbol}:{timeframe}:{id}"

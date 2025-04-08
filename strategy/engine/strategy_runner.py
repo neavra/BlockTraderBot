@@ -1,12 +1,11 @@
-# strategy/engine/runner.py
 import asyncio
 import logging
 import json
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 from strategy.strategies.base import Strategy
-from shared.domain.dto.signal_dto import Signal
+from shared.domain.dto.signal_dto import SignalDto
 from shared.queue.queue_service import QueueService
 from shared.cache.cache_service import CacheService
 from shared.constants import Exchanges, Queues, RoutingKeys, CacheKeys, CacheTTL
@@ -20,6 +19,7 @@ class StrategyRunner:
     - Data retrieval from cache
     - Strategy execution
     - Signal publishing
+    - Event-based strategy execution
     """
     
     def __init__(
@@ -27,6 +27,7 @@ class StrategyRunner:
         strategies: List[Strategy], 
         cache_service: CacheService,
         producer_queue: QueueService,
+        consumer_queue: QueueService,
         config: Dict[str, Any]
     ):
         """
@@ -36,14 +37,20 @@ class StrategyRunner:
             strategies: List of strategies to run
             cache_service: Cache service for data retrieval
             producer_queue: Queue service for publishing signals
+            consumer_queue: Queue service for consuming candle events
             config: Configuration dictionary
         """
         self.strategies = strategies
+        # Holds Candle Data
         self.cache_service = cache_service
+        # Produces Signals generated from the data
         self.producer_queue = producer_queue
+        # Consumes the candle data from the data layer
+        self.consumer_queue = consumer_queue
         self.config = config
         self.running = False
         self.execution_task = None
+        self.main_loop = None  # Will store the event loop for callbacks
     
     async def start(self):
         """Start the strategy runner"""
@@ -54,11 +61,21 @@ class StrategyRunner:
         self.running = True
         logger.info("Starting strategy runner...")
         
+        # Store the event loop for callbacks
+        self.main_loop = asyncio.get_running_loop()
+        
         # Initialize the signal exchange
         self.producer_queue.declare_exchange(Exchanges.STRATEGY)
         
-        # Start the execution loop in a background task
-        self.execution_task = asyncio.create_task(self._run_execution_loop())
+        # Initialize the event consumer
+        await self._init_event_consumer()
+        
+        # Start the execution loop in a background task (if enabled)
+        # if self.config.get('enable_execution_loop', True):
+        #     self.execution_task = asyncio.create_task(self._run_execution_loop())
+        #     logger.info("Strategy execution loop started")
+        # else:
+        #     logger.info("Strategy execution loop disabled, using event-based execution only")
         
         logger.info("Strategy runner started")
     
@@ -76,118 +93,194 @@ class StrategyRunner:
             
         logger.info("Strategy runner stopped")
     
-    async def _run_execution_loop(self):
-        """Main execution loop for the strategy runner"""
-        try:
-            execution_interval = self.config.get('execution_interval_seconds', 1)
-            
-            while self.running:
-                try:
-                    await self.execute_strategies()
-                except Exception as e:
-                    logger.error(f"Error during strategy execution: {e}", exc_info=True)
-                
-                # Wait for the next execution cycle
-                await asyncio.sleep(execution_interval)
-                
-        except asyncio.CancelledError:
-            logger.info("Strategy execution loop cancelled")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error in strategy execution loop: {e}", exc_info=True)
-    
-    async def execute_strategies(self):
-        """Execute all strategies with current market data"""
-        # Get symbols and timeframes to process from config
-        symbols = self.config.get('symbols', [])
-        timeframes = self.config.get('timeframes', [])
+    async def _init_event_consumer(self):
+        """Initialize the candle event consumer."""
+        logger.info("Initializing candle event consumer...")
         
-        for symbol in symbols:
-            for timeframe in timeframes:
-                # Get market data from cache
-                data = await self._get_market_data(symbol, timeframe)
-                if not data:
-                    continue
-                
-                # Execute each strategy
-                for strategy in self.strategies:
-                    try:
-                        # Get strategy requirements
-                        requirements = strategy.get_requirements()
-                        supported_timeframes = requirements.get('timeframes', [])
-                        
-                        # Skip if this timeframe is not supported by the strategy
-                        if supported_timeframes and timeframe not in supported_timeframes:
-                            continue
-                            
-                        # Execute the strategy
-                        signal = await strategy.analyze(data)
-                        
-                        # If a signal was generated, publish it
-                        if signal:
-                            await self._publish_signal(signal)
-                            logger.info(f"Generated signal from {strategy.name} for {symbol} ({timeframe})")
-                    except Exception as e:
-                        logger.error(f"Error executing strategy {strategy.name}: {e}", exc_info=True)
+        try:
+            # Set up exchange and queue
+            self.consumer_queue.declare_exchange(Exchanges.MARKET_DATA)
+            self.consumer_queue.declare_queue(Queues.CANDLES)
+            
+            # Bind to candle events - we want to receive all candle events
+            self.consumer_queue.bind_queue(
+                Exchanges.MARKET_DATA,
+                Queues.CANDLES,
+                RoutingKeys.CANDLE_ALL
+            )
+            
+            # Subscribe to the queue
+            self.consumer_queue.subscribe(
+                Queues.CANDLES,
+                self._on_candle_event
+            )
+            
+            logger.info("Candle event consumer initialized")
+        except Exception as e:
+            logger.error(f"Failed to initialize candle event consumer: {e}")
+            raise
     
-    async def _get_market_data(self, symbol: str, timeframe: str) -> Dict[str, Any]:
+    def _on_candle_event(self, event: Dict[str, Any]):
         """
-        Retrieve market data from cache
+        Callback for handling candle events from the queue.
+        This is called when a new candle is received.
+        
+        Args:
+            event: Candle event data
+        """
+        try:
+            logger.debug(f"Received candle event: {event.get('symbol')} {event.get('timeframe')}")
+            
+            # Determine the event source, default to live
+            event_source = event.get('source', 'live')
+            
+            # Schedule strategy execution in the background
+            # This allows us to react to new market data immediately
+            if self.main_loop and self.running:
+                asyncio.run_coroutine_threadsafe(
+                    self._execute_on_event(event, event_source),
+                    self.main_loop
+                )
+        except Exception as e:
+            logger.error(f"Error processing candle event: {e}")
+    
+    async def _execute_on_event(self, event: Dict[str, Any], source: str):
+        """
+        Execute strategies based on a candle event.
+        
+        Args:
+            event: Candle event data
+            source: Event source ('historical' or 'live')
+        """
+        try:
+            symbol = event.get('symbol')
+            timeframe = event.get('timeframe')
+            
+            if not symbol or not timeframe:
+                logger.warning(f"Missing required fields in candle event: {event}")
+                return
+            
+            # Get market data from the appropriate source
+            data = await self._get_market_data_by_source(symbol, timeframe, source)
+            
+            if not data:
+                logger.warning(f"No market data available for {symbol} {timeframe} from {source}")
+                return
+            
+            # Execute each applicable strategy
+            for strategy in self.strategies:
+                try:
+                    # Get strategy requirements
+                    requirements = strategy.get_requirements()
+                    supported_timeframes = requirements.get('timeframes', [])
+                    
+                    # Skip if this timeframe is not supported by the strategy
+                    if supported_timeframes and timeframe not in supported_timeframes:
+                        continue
+                        
+                    # Execute the strategy
+                    signal = await strategy.analyze(data)
+                    
+                    # If a signal was generated, publish it
+                    if signal:
+                        await self._publish_signal(signal)
+                        logger.info(f"Generated signal from {strategy.name} for {symbol} ({timeframe}) based on {source} event")
+                except Exception as e:
+                    logger.error(f"Error executing strategy {strategy.name} on event: {e}", exc_info=True)
+        except Exception as e:
+            logger.error(f"Error in event-based strategy execution: {e}", exc_info=True)
+    
+    async def _get_market_data_by_source(self, symbol: str, timeframe: str, source: str) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve market data based on the source type.
+        Uses the last updated timestamp to get candles after that time from the appropriate
+        source-specific sorted set. Optimized to fetch only new candles from Redis.
         
         Args:
             symbol: Trading pair
             timeframe: Candle timeframe
+            source: Data source ('historical' or 'live')
             
         Returns:
-            Dictionary with market data
+            Dictionary with market data or None if data not available
         """
         try:
-            # Get latest candle
-            latest_key = CacheKeys.LATEST_CANDLE.format(
-                exchange=self.config.get('exchange', 'default'),
-                symbol=symbol,
-                timeframe=timeframe
-            )
-            latest_candle = self.cache_service.get(latest_key)
-            
-            if not latest_candle:
-                logger.debug(f"No latest candle found for {symbol} {timeframe}")
-                return None
-            
-            # Determine max lookback needed by all strategies
-            max_lookback = 100  # Default
-            for strategy in self.strategies:
-                requirements = strategy.get_requirements()
-                strategy_lookback = requirements.get('lookback_period', 0)
-                max_lookback = max(max_lookback, strategy_lookback)
-            
-            # Get candle history keys
-            history_key = CacheKeys.CANDLE_HISTORY_SET.format(
-                exchange=self.config.get('exchange', 'default'),
-                symbol=symbol,
-                timeframe=timeframe
-            )
-            
-            # Get candle IDs
-            candle_ids = self.cache_service.get_from_sorted_set(
-                history_key, 
-                0, 
-                max_lookback - 1,  # -1 because we already have the latest candle
-                desc=True  # Most recent first
-            )
-            
-            # Get candles data
-            candles = [latest_candle]  # Start with latest candle
-            for candle_id in candle_ids:
-                candle_key = CacheKeys.CANDLE_DATA.format(
+            # Build the cache keys based on source
+            if source == 'historical':
+                # For historical data, use the historical candle set
+                candles_sorted_set_key = CacheKeys.CANDLE_HISTORY_REST_API_DATA.format(
                     exchange=self.config.get('exchange', 'default'),
                     symbol=symbol,
-                    timeframe=timeframe,
-                    timestamp=candle_id
+                    timeframe=timeframe
                 )
-                candle = self.cache_service.get(candle_key)
-                if candle:
-                    candles.append(candle)
+            else:
+                # For live data, use the live candle set
+                candles_sorted_set_key = CacheKeys.CANDLE_LIVE_WEBSOCKET_DATA.format(
+                    exchange=self.config.get('exchange', 'default'),
+                    symbol=symbol,
+                    timeframe=timeframe
+                )
+            
+            # Get the last updated timestamp key
+            last_updated_key = CacheKeys.CANDLE_LAST_UPDATED.format(
+                    exchange=self.config.get('exchange', 'default'),
+                    symbol=symbol,
+                    timeframe=timeframe
+                )
+            last_updated_info = self.cache_service.get(last_updated_key)
+            
+            # Determine the minimum score (timestamp) to retrieve candles
+            min_score = '-inf'  # Default to get all candles if no last update
+            if last_updated_info and isinstance(last_updated_info, dict):
+                timestamp = last_updated_info.get('timestamp')
+                if timestamp and isinstance(timestamp, str):
+                    try:
+                        # Convert ISO format to timestamp if needed
+                        dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                        min_score = dt.timestamp() * 1000
+                        logger.debug(f"Retrieving candles after timestamp {min_score}")
+                    except ValueError:
+                        logger.warning(f"Invalid timestamp format in last_updated_info: {timestamp}")
+            
+            # Get all candles from the sorted set with scores (timestamps) higher than min_score
+            # This way we only retrieve candles newer than the last processed one
+            # TODO need to implement
+            candles = self.cache_service.get_from_sorted_set_by_score(
+                candles_sorted_set_key,
+                min_score=min_score,
+                max_score='+inf',
+                with_scores=True
+            )
+            
+            if not candles:
+                logger.debug(f"No new candles found for {symbol} {timeframe} from {source}")
+                return None
+            
+            # Convert the candles from JSON strings to dictionaries
+            candle_dtos = []
+            for candle_data in candles:
+                # Unpack the candle data and score if with_scores is True
+                if isinstance(candle_data, (list, tuple)) and len(candle_data) == 2:
+                    candle_json, score = candle_data
+                else:
+                    candle_json = candle_data
+                
+                try:
+                    candle = json.loads(candle_json) if isinstance(candle_json, str) else candle_json
+                    candle_dtos.append(candle)
+                except json.JSONDecodeError:
+                    logger.warning(f"Failed to decode candle JSON: {candle_json}")
+                    continue
+            
+            # Sort candles by timestamp (ascending)
+            candle_dtos.sort(key=lambda x: x.get('timestamp', 0))
+            
+            # Get the latest candle (last in the sorted list)
+            latest_candle = candle_dtos[-1] if candle_dtos else None
+            
+            if not latest_candle:
+                logger.debug(f"No latest candle available for {symbol} {timeframe} from {source}")
+                return None
             
             # Get market state
             market_state_key = CacheKeys.MARKET_STATE.format(
@@ -196,30 +289,76 @@ class StrategyRunner:
             )
             market_state = self.cache_service.get(market_state_key) or {}
             
+            # Determine how many historical candles we need for strategy lookback
+            max_lookback = 0
+            for strategy in self.strategies:
+                requirements = strategy.get_requirements()
+                strategy_lookback = requirements.get('lookback_period', 0)
+                max_lookback = max(max_lookback, strategy_lookback)
+            
+            # If we need additional historical candles for lookback, fetch them
+            # if max_lookback > len(candle_dtos):
+            #     additional_candles_needed = max_lookback - len(candle_dtos)
+            #     logger.debug(f"Fetching {additional_candles_needed} additional candles for lookback")
+                
+            #     # Get additional candles with scores less than min_score
+            #     historical_candles = self.cache_service.get_from_sorted_set_by_score(
+            #         candles_sorted_set_key,
+            #         min_score='-inf',
+            #         max_score=min_score,
+            #         with_scores=True,
+            #         limit=additional_candles_needed,
+            #         descending=True  # Get the most recent ones first
+            #     )
+                
+            #     for candle_data in historical_candles:
+            #         # Unpack the candle data and score if with_scores is True
+            #         if isinstance(candle_data, (list, tuple)) and len(candle_data) == 2:
+            #             candle_json, score = candle_data
+            #         else:
+            #             candle_json = candle_data
+                    
+            #         try:
+            #             candle = json.loads(candle_json) if isinstance(candle_json, str) else candle_json
+            #             candle_dtos.insert(0, candle)  # Insert at the beginning
+            #         except json.JSONDecodeError:
+            #             logger.warning(f"Failed to decode historical candle JSON")
+            #             continue
+            
             # Build market data dictionary
             data = {
                 'symbol': symbol,
                 'timeframe': timeframe,
                 'exchange': self.config.get('exchange', 'default'),
                 'timestamp': datetime.now().isoformat(),
-                'candles': candles,
+                'candles': candle_dtos,
                 'latest_candle': latest_candle,
                 'current_price': latest_candle.get('close'),
-                'market_state': market_state
+                'market_state': market_state,
+                'source': source,  # Include the source in the data for reference
+                'last_updated': last_updated_info
             }
             
-            # Update and add market structure
-            if hasattr(self, 'market_structure'):
-                market_context = await self.market_structure.update(data)
-                data['market_context'] = market_context
+            # Update and add market structure if available
+            # if hasattr(self, 'market_structure') and self.market_structure:
+            #     market_context = await self.market_structure.update(data)
+            #     data['market_context'] = market_context
+            
+            # Update the last updated timestamp to the latest candle's timestamp
+            current_time = datetime.now().isoformat()
+            latest_timestamp = latest_candle.get('timestamp', current_time)
+            self.cache_service.set(last_updated_key, {
+                'timestamp': latest_timestamp,
+                'source': source
+            })
             
             return data
             
         except Exception as e:
-            logger.error(f"Error retrieving market data for {symbol} {timeframe}: {e}", exc_info=True)
+            logger.error(f"Error retrieving {source} market data for {symbol} {timeframe}: {e}", exc_info=True)
             return None
     
-    async def _publish_signal(self, signal: Signal) -> bool:
+    async def _publish_signal(self, signal: SignalDto) -> bool:
         """
         Publish a signal to the queue and cache
         
@@ -239,7 +378,7 @@ class StrategyRunner:
             signal_dict = signal.to_dict()
             
             # Create routing key
-            routing_key = RoutingKeys.SIGNAL_GENERATED.format(
+            routing_key = RoutingKeys.ORDER_BLOCK_DETECTED.format(
                 exchange=signal.exchange,
                 symbol=signal.symbol,
                 timeframe=signal.timeframe or "default"
@@ -283,3 +422,71 @@ class StrategyRunner:
         except Exception as e:
             logger.error(f"Error publishing signal: {e}", exc_info=True)
             return False
+        
+    # async def _run_execution_loop(self):
+    #     """Main execution loop for the strategy runner"""
+    #     try:
+    #         execution_interval = self.config.get('execution_interval_seconds', 1)
+            
+    #         while self.running:
+    #             try:
+    #                 await self.execute_strategies()
+    #             except Exception as e:
+    #                 logger.error(f"Error during strategy execution: {e}", exc_info=True)
+                
+    #             # Wait for the next execution cycle
+    #             await asyncio.sleep(execution_interval)
+                
+    #     except asyncio.CancelledError:
+    #         logger.info("Strategy execution loop cancelled")
+    #         raise
+    #     except Exception as e:
+    #         logger.error(f"Unexpected error in strategy execution loop: {e}", exc_info=True)
+    
+    # async def execute_strategies(self):
+    #     """Execute all strategies with current market data"""
+    #     # Get symbols and timeframes to process from config
+    #     symbols = self.config.get('symbols', [])
+    #     timeframes = self.config.get('timeframes', [])
+        
+    #     for symbol in symbols:
+    #         for timeframe in timeframes:
+    #             # Get market data from cache
+    #             data = await self._get_market_data(symbol, timeframe)
+    #             if not data:
+    #                 continue
+                
+    #             # Execute each strategy
+    #             for strategy in self.strategies:
+    #                 try:
+    #                     # Get strategy requirements
+    #                     requirements = strategy.get_requirements()
+    #                     supported_timeframes = requirements.get('timeframes', [])
+                        
+    #                     # Skip if this timeframe is not supported by the strategy
+    #                     if supported_timeframes and timeframe not in supported_timeframes:
+    #                         continue
+                            
+    #                     # Execute the strategy
+    #                     signal = await strategy.analyze(data)
+                        
+    #                     # If a signal was generated, publish it
+    #                     if signal:
+    #                         await self._publish_signal(signal)
+    #                         logger.info(f"Generated signal from {strategy.name} for {symbol} ({timeframe})")
+    #                 except Exception as e:
+    #                     logger.error(f"Error executing strategy {strategy.name}: {e}", exc_info=True)
+    
+    # async def _get_market_data(self, symbol: str, timeframe: str) -> Optional[Dict[str, Any]]:
+    #     """
+    #     Retrieve market data from cache for the periodic execution loop.
+    #     This method always uses the live data cache.
+        
+    #     Args:
+    #         symbol: Trading pair
+    #         timeframe: Candle timeframe
+            
+    #     Returns:
+    #         Dictionary with market data or None if data not available
+    #     """
+    #     return await self._get_market_data_by_source(symbol, timeframe, 'live')
