@@ -4,6 +4,7 @@ import json
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
+from strategy.engine.indicator_dag import IndicatorDAG
 from strategy.strategies.base import Strategy
 from shared.domain.dto.signal_dto import SignalDto
 from shared.queue.queue_service import QueueService
@@ -51,6 +52,9 @@ class StrategyRunner:
         self.running = False
         self.execution_task = None
         self.main_loop = None  # Will store the event loop for callbacks
+        
+        # Create indicator DAG
+        self.indicator_dag = IndicatorDAG()
     
     async def start(self):
         """Start the strategy runner"""
@@ -70,12 +74,8 @@ class StrategyRunner:
         # Initialize the event consumer
         await self._init_event_consumer()
         
-        # Start the execution loop in a background task (if enabled)
-        # if self.config.get('enable_execution_loop', True):
-        #     self.execution_task = asyncio.create_task(self._run_execution_loop())
-        #     logger.info("Strategy execution loop started")
-        # else:
-        #     logger.info("Strategy execution loop disabled, using event-based execution only")
+        # Initialize the indicator DAG with registered indicators
+        await self._init_indicator_dag()
         
         logger.info("Strategy runner started")
     
@@ -120,6 +120,33 @@ class StrategyRunner:
             logger.error(f"Failed to initialize candle event consumer: {e}")
             raise
     
+    async def _init_indicator_dag(self):
+        """Initialize the indicator DAG by registering indicators and their dependencies"""
+        logger.info("Initializing indicator DAG...")
+        
+        # Extract all unique indicators from strategies
+        all_indicators = {}
+        
+        # First, gather all indicators from strategies
+        for strategy in self.strategies:
+            for name, indicator in strategy.indicators.items():
+                all_indicators[name] = indicator
+        
+        # Now register each indicator with its dependencies
+        for name, indicator in all_indicators.items():
+            # Get requirements from indicator
+            requirements = indicator.get_requirements()
+            
+            # Extract indicator dependencies
+            dependencies = requirements.get('indicators', [])
+            
+            # Register in the DAG
+            self.indicator_dag.register_indicator(name, indicator, dependencies)
+        
+        # Compute initial execution order
+        execution_order = self.indicator_dag.compute_execution_order()
+        logger.info(f"Indicator execution order established: {execution_order}")
+
     def _on_candle_event(self, event: Dict[str, Any]):
         """
         Callback for handling candle events from the queue.
@@ -167,26 +194,9 @@ class StrategyRunner:
                 logger.warning(f"No market data available for {symbol} {timeframe} from {source}")
                 return
             
-            # Execute each applicable strategy
-            for strategy in self.strategies:
-                try:
-                    # Get strategy requirements
-                    requirements = strategy.get_requirements()
-                    supported_timeframes = requirements.get('timeframes', [])
-                    
-                    # Skip if this timeframe is not supported by the strategy
-                    if supported_timeframes and timeframe not in supported_timeframes:
-                        continue
-                        
-                    # Execute the strategy
-                    signal = await strategy.analyze(data)
-                    
-                    # If a signal was generated, publish it
-                    if signal:
-                        await self._publish_signal(signal)
-                        logger.info(f"Generated signal from {strategy.name} for {symbol} ({timeframe}) based on {source} event")
-                except Exception as e:
-                    logger.error(f"Error executing strategy {strategy.name} on event: {e}", exc_info=True)
+            # Execute all applicable strategies with this data
+            await self.execute_strategies(data)
+            
         except Exception as e:
             logger.error(f"Error in event-based strategy execution: {e}", exc_info=True)
     
@@ -423,6 +433,61 @@ class StrategyRunner:
             logger.error(f"Error publishing signal: {e}", exc_info=True)
             return False
         
+    async def execute_strategies(self, data: Dict[str, Any]):
+        """
+        Execute all applicable strategies with the provided market data
+        
+        Args:
+            data: Market data dictionary including candles, symbol, timeframe, etc.
+        """
+        try:
+            # Collect all required indicators across strategies
+            required_indicators = set()
+            for strategy in self.strategies:
+                # Check if strategy is applicable for this symbol and timeframe
+                requirements = strategy.get_requirements()
+                timeframes = requirements.get('timeframes', [])
+                
+                if not timeframes or data.get('timeframe') in timeframes:
+                    # Add this strategy's indicators to the required set
+                    indicators_needed = requirements.get('indicators', [])
+                    required_indicators.update(indicators_needed)
+            
+            # Run indicators through the DAG
+            indicator_results = await self.indicator_dag.run_indicators(
+                data, 
+                requested_indicators=list(required_indicators)
+            )
+            
+            # Enhance market data with indicator results
+            enhanced_data = data.copy()
+            for indicator_name, result in indicator_results.items():
+                enhanced_data[f"{indicator_name}_data"] = result
+            
+            # Execute each applicable strategy
+            for strategy in self.strategies:
+                try:
+                    # Get strategy requirements
+                    requirements = strategy.get_requirements()
+                    timeframes = requirements.get('timeframes', [])
+                    
+                    # Skip if this timeframe is not supported by the strategy
+                    if timeframes and data.get('timeframe') not in timeframes:
+                        continue
+                        
+                    # Execute the strategy with enhanced data
+                    signal = await strategy.analyze(enhanced_data)
+                    
+                    # If a signal was generated, publish it
+                    if signal:
+                        await self._publish_signal(signal)
+                        logger.info(f"Generated signal from {strategy.name} for {data.get('symbol')} ({data.get('timeframe')})")
+                except Exception as e:
+                    logger.error(f"Error executing strategy {strategy.name}: {e}", exc_info=True)
+        
+        except Exception as e:
+            logger.error(f"Error in strategy execution: {e}", exc_info=True)
+
     # async def _run_execution_loop(self):
     #     """Main execution loop for the strategy runner"""
     #     try:
