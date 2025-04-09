@@ -3,10 +3,11 @@ from strategy.indicators.base import Indicator
 from strategy.strategies.base import Strategy
 
 # Import all indicator implementations
-from strategy.composite_indicators.order_block import OrderBlockIndicator
+from strategy.indicators.composite_indicators.order_block import OrderBlockIndicator
+from strategy.indicators.composite_indicators.hidden_ob import HiddenOrderBlockIndicator
 from strategy.indicators.fvg import FVGIndicator
 from strategy.indicators.doji_candle import DojiCandleIndicator
-# from strategy.indicators.structure import StructureBreakIndicator
+from strategy.indicators.bos import StructureBreakIndicator
 
 class IndicatorFactory:
     """Factory for creating indicator instances by name."""
@@ -14,10 +15,11 @@ class IndicatorFactory:
     def __init__(self):
         """Initialize the factory with indicator mappings."""
         self._indicators = {
-            'orderblock': OrderBlockIndicator,
+            'order_block': OrderBlockIndicator,
             'fvg': FVGIndicator,
-            'doji': DojiCandleIndicator,
-            # 'structure_break': StructureBreakIndicator,
+            'structure_break': StructureBreakIndicator,
+            'doji_candle': DojiCandleIndicator,
+            'hidden_order_block': HiddenOrderBlockIndicator,
         }
     
     def create_indicator(self, name: str, params: Dict[str, Any] = None) -> Indicator:

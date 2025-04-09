@@ -1,9 +1,10 @@
+# strategy/strategies/strategy_factory.py
 from typing import Dict, Any, Type
 from strategy.indicators.base import Indicator
 from strategy.strategies.base import Strategy
 
 # Import all strategy implementations
-from strategy.composite_indicators.hidden_ob import HiddenOrderBlockStrategy
+from strategy.strategies.hidden_ob_strategy import HiddenOrderBlockStrategy
 
 class StrategyFactory:
     """Factory for creating strategy instances by name."""
@@ -11,7 +12,7 @@ class StrategyFactory:
     def __init__(self):
         """Initialize the factory with strategy mappings."""
         self._strategies = {
-            'hidden_ob': HiddenOrderBlockStrategy,
+            'hidden_order_block': HiddenOrderBlockStrategy,
         }
     
     def create_strategy(self, name: str, indicators: Dict[str, Indicator] = None, 

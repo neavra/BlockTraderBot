@@ -1,5 +1,5 @@
 from typing import Dict, Any, List
-from indicators.base import Indicator
+from strategy.indicators.base import Indicator
 import logging
 
 logger = logging.getLogger(__name__)
