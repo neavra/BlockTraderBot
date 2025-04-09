@@ -1,5 +1,5 @@
 from typing import Dict, Any, List, Tuple, Optional
-from ..indicators.base import Indicator
+from strategy.indicators.base import Indicator
 import logging
 
 logger = logging.getLogger(__name__)
@@ -291,18 +291,9 @@ class OrderBlockIndicator(Indicator):
         Returns:
             Dictionary with requirements
         """
-        required_indicators = ['fvg']
-        
-        # Add optional indicators based on configuration
-        if self.params['require_doji']:
-            required_indicators.append('doji')
-        
-        if self.params['require_bos']:
-            required_indicators.append('structure_break')
-        
         return {
             'candles': True,
-            'lookback_period': self.params['lookback_period'],
+            'lookback_period': 50,
             'timeframes': ['15m', '1h', '4h', '1d'],
-            'indicators': required_indicators
+            'indicators': ['structure_break', 'fvg', 'doji_candle']
         }
