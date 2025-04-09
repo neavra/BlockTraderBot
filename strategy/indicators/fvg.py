@@ -109,7 +109,8 @@ class FVGIndicator(Indicator):
                     'size_percent': gap_pct * 100,  # Convert to percentage
                     'strength': gap_strength,
                     'candle_index': candle_index,
-                    'filled': False
+                    'filled': False,
+                    'candle': candle_current.copy()  # Include the candle that formed this FVG
                 }
                 
                 # Add timestamp if available
@@ -148,7 +149,8 @@ class FVGIndicator(Indicator):
                     'size_percent': gap_pct * 100,  # Convert to percentage
                     'strength': gap_strength,
                     'candle_index': candle_index,
-                    'filled': False
+                    'filled': False,
+                    'candle': candle_current.copy()  # Include the candle that formed this FVG
                 }
                 
                 # Add timestamp if available
@@ -179,74 +181,43 @@ class FVGIndicator(Indicator):
             'strength': avg_strength
         }
     
-    # def _filter_filled_by_price_action(self, candles: List[Dict[str, Any]], 
-    #                                   bullish_fvgs: List[Dict[str, Any]], 
-    #                                   bearish_fvgs: List[Dict[str, Any]]) -> None:
-    #     """
-    #     Check if FVGs have been filled by subsequent price action
+    def _filter_filled_by_price_action(self, candles: List[Dict[str, Any]], 
+                                    bullish_fvgs: List[Dict[str, Any]], 
+                                    bearish_fvgs: List[Dict[str, Any]]) -> None:
+        """
+        Check if FVGs have been filled by subsequent price action
         
-    #     Args:
-    #         candles: List of candles
-    #         bullish_fvgs: List of bullish FVGs to check
-    #         bearish_fvgs: List of bearish FVGs to check
-    #     """
-    #     # Get the latest candle index
-    #     latest_idx = len(candles) - 1
+        Args:
+            candles: List of candles
+            bullish_fvgs: List of bullish FVGs to check
+            bearish_fvgs: List of bearish FVGs to check
+        """
+        # Get the latest candle index
+        latest_idx = len(candles) - 1
         
-    #     # Check each bullish FVG
-    #     for fvg in bullish_fvgs:
-    #         # Get the candle index where this FVG was formed
-    #         fvg_idx = latest_idx + fvg['candle_index']
+        # Check each bullish FVG
+        for fvg in bullish_fvgs:
+            # Get the candle index where this FVG was formed
+            fvg_idx = latest_idx + fvg['candle_index']
             
-    #         # Check candles after FVG formation
-    #         for i in range(fvg_idx + 1, len(candles)):
-    #             # If price traded below the FVG top but above bottom, it's partially filled
-    #             if candles[i]['low'] <= fvg['top'] and candles[i]['high'] >= fvg['bottom']:
-    #                 fvg['filled'] = True
-    #                 break
+            # Check candles after FVG formation
+            for i in range(fvg_idx + 1, len(candles)):
+                # If price traded below the FVG top but above bottom, it's partially filled
+                if candles[i]['low'] <= fvg['top'] and candles[i]['high'] >= fvg['bottom']:
+                    fvg['filled'] = True
+                    break
         
-    #     # Check each bearish FVG
-    #     for fvg in bearish_fvgs:
-    #         # Get the candle index where this FVG was formed
-    #         fvg_idx = latest_idx + fvg['candle_index']
+        # Check each bearish FVG
+        for fvg in bearish_fvgs:
+            # Get the candle index where this FVG was formed
+            fvg_idx = latest_idx + fvg['candle_index']
             
-    #         # Check candles after FVG formation
-    #         for i in range(fvg_idx + 1, len(candles)):
-    #             # If price traded above the FVG bottom but below top, it's partially filled
-    #             if candles[i]['high'] >= fvg['bottom'] and candles[i]['low'] <= fvg['top']:
-    #                 fvg['filled'] = True
-    #                 break
-    
-    # async def filter_fvgs_by_price(self, current_price: float, fvgs_from_db: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    #     """
-    #     Filter FVGs based on the current price
-        
-    #     This removes FVGs that have been "filled" by the current price movement.
-    #     - For bullish FVGs: Remove if price is below the top of the FVG
-    #     - For bearish FVGs: Remove if price is above the bottom of the FVG
-        
-    #     Args:
-    #         current_price: Current market price
-    #         fvgs_from_db: List of FVGs retrieved from the database
-            
-    #     Returns:
-    #         Filtered list of FVGs that are still valid
-    #     """
-    #     valid_fvgs = []
-        
-    #     for fvg in fvgs_from_db:
-    #         fvg_type = fvg.get('type')
-            
-    #         if fvg_type == 'bullish':
-    #             # For bullish FVGs, they're valid if price is above the top
-    #             if current_price > fvg['top']:
-    #                 valid_fvgs.append(fvg)
-    #         elif fvg_type == 'bearish':
-    #             # For bearish FVGs, they're valid if price is below the bottom
-    #             if current_price < fvg['bottom']:
-    #                 valid_fvgs.append(fvg)
-        
-    #     return valid_fvgs
+            # Check candles after FVG formation
+            for i in range(fvg_idx + 1, len(candles)):
+                # If price traded above the FVG bottom but below top, it's partially filled
+                if candles[i]['high'] >= fvg['bottom'] and candles[i]['low'] <= fvg['top']:
+                    fvg['filled'] = True
+                    break
     
     def get_requirements(self) -> Dict[str, Any]:
         """

@@ -3,8 +3,9 @@ from strategy.indicators.base import Indicator
 from strategy.strategies.base import Strategy
 
 # Import all indicator implementations
-from strategy.indicators.order_block import OrderBlockIndicator
+from strategy.composite_indicators.order_block import OrderBlockIndicator
 from strategy.indicators.fvg import FVGIndicator
+from strategy.indicators.doji_candle import DojiCandleIndicator
 # from strategy.indicators.structure import StructureBreakIndicator
 
 class IndicatorFactory:
@@ -15,6 +16,7 @@ class IndicatorFactory:
         self._indicators = {
             'orderblock': OrderBlockIndicator,
             'fvg': FVGIndicator,
+            'doji': DojiCandleIndicator,
             # 'structure_break': StructureBreakIndicator,
         }
     

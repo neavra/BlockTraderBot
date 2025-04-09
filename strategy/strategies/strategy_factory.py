@@ -3,7 +3,7 @@ from strategy.indicators.base import Indicator
 from strategy.strategies.base import Strategy
 
 # Import all strategy implementations
-from strategy.strategies.hidden_ob import HiddenOrderBlockStrategy
+from strategy.composite_indicators.hidden_ob import HiddenOrderBlockStrategy
 
 class StrategyFactory:
     """Factory for creating strategy instances by name."""
