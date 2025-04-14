@@ -358,35 +358,50 @@ class TestStructureBreakIndicator(unittest.TestCase):
     def test_confirmation_requirement(self):
         """Test behavior with different confirmation requirements."""
         async def run_test():
-            # The custom indicator requires 2 confirmations
-            # Use a modified candle list with only 1 confirmation candle
-            modified_hh_candles = self.hh_candle_dicts[:-1]  # Remove the second confirmation
+            # Let's create a more controlled test case specifically for confirmations
+            # Create candles where there's a clear breakout followed by confirmations
+            breakout_candles = [
+                {'open': 100, 'high': 102, 'low': 98, 'close': 101, 'timestamp': datetime(2023, 1, 1, 0, 0, tzinfo=timezone.utc)},
+                {'open': 101, 'high': 103, 'low': 99, 'close': 102, 'timestamp': datetime(2023, 1, 1, 1, 0, tzinfo=timezone.utc)},
+                # Candle that breaks above swing high (105.0)
+                {'open': 102, 'high': 106, 'low': 101, 'close': 105, 'timestamp': datetime(2023, 1, 1, 2, 0, tzinfo=timezone.utc)},
+                # First confirmation candle
+                {'open': 105, 'high': 107, 'low': 104, 'close': 106, 'timestamp': datetime(2023, 1, 1, 3, 0, tzinfo=timezone.utc)},
+                # Second confirmation candle
+                {'open': 106, 'high': 108, 'low': 105, 'close': 107, 'timestamp': datetime(2023, 1, 1, 4, 0, tzinfo=timezone.utc)}
+            ]
             
-            # With default indicator (1 confirmation needed)
+            # Test with 1 confirmation (default indicator)
+            one_confirmation = breakout_candles[:4]  # Up to and including first confirmation
             default_result = await self.indicator.calculate({
-                'candles': modified_hh_candles,
+                'candles': one_confirmation,
                 'market_context': self.market_context
             })
+            
+            # Find higher high breaks in the result
+            default_hh = [b for b in default_result['breaks'] if b['break_type'] == 'higher_high']
+            
+            # Default indicator (1 confirmation) should detect the break
+            self.assertGreaterEqual(len(default_hh), 1)
+            if len(default_hh) > 0:
+                self.assertEqual(default_hh[0]['candle']['high'], 106)  # The breakout candle's high
             
             # With custom indicator (2 confirmations needed)
             custom_result = await self.custom_indicator.calculate({
-                'candles': modified_hh_candles,
+                'candles': one_confirmation,
                 'market_context': self.market_context
             })
             
-            # Find higher high breaks in both results
-            default_hh = [b for b in default_result['breaks'] if b['break_type'] == 'higher_high']
+            # Find higher high breaks
             custom_hh = [b for b in custom_result['breaks'] if b['break_type'] == 'higher_high']
-            
-            # Default indicator should detect the break with just 1 confirmation
-            self.assertGreaterEqual(len(default_hh), 1)
             
             # Custom indicator should not detect (needs 2 confirmations)
             self.assertEqual(len(custom_hh), 0)
             
-            # Now test with full candle list (2 confirmations available)
+            # Now test with two confirmations available
+            two_confirmations = breakout_candles
             full_custom_result = await self.custom_indicator.calculate({
-                'candles': self.hh_candle_dicts,
+                'candles': two_confirmations,
                 'market_context': self.market_context
             })
             
@@ -394,6 +409,8 @@ class TestStructureBreakIndicator(unittest.TestCase):
             
             # Custom indicator should now detect with 2 confirmations
             self.assertGreaterEqual(len(full_custom_hh), 1)
+            if len(full_custom_hh) > 0:
+                self.assertEqual(full_custom_hh[0]['candle']['high'], 106)  # The breakout candle's high
             
         asyncio.run(run_test())
     

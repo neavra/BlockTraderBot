@@ -50,10 +50,7 @@ class StructureBreakIndicator(Indicator):
                 
         Returns:
             Dictionary with detected structure breaks:
-                - higher_highs: List of higher high breaks with candle details
-                - lower_lows: List of lower low breaks with candle details
-                - higher_lows: List of higher low breaks with candle details
-                - lower_highs: List of lower high breaks with candle details
+                - breaks: List of all structure breaks
                 - has_bullish_break: Boolean indicating if a bullish break was found (HH or HL)
                 - has_bearish_break: Boolean indicating if a bearish break was found (LL or LH)
                 - latest_break: Most recent structure break or None
@@ -94,8 +91,9 @@ class StructureBreakIndicator(Indicator):
         higher_lows = []
         lower_highs = []
         
-        # Calculate minimum break thresholds
-        min_break_value = market_context.get('current_price', candles[-1]['close']) * self.params['min_break_percentage']
+        # Calculate minimum break thresholds based on swing points rather than current price
+        min_break_high = swing_high_price * self.params['min_break_percentage']
+        min_break_low = swing_low_price * self.params['min_break_percentage']
         
         # Process each candle in the lookback period (we need to consider relative position to swings)
         lookback_period = min(self.params['lookback_period'], len(candles))
@@ -108,7 +106,7 @@ class StructureBreakIndicator(Indicator):
             candle = candles[candle_idx]
             
             # Higher High detection
-            if candle['high'] > swing_high_price + min_break_value:
+            if candle['high'] > swing_high_price + min_break_high:
                 # Check if confirmed by N candles staying above
                 if self._is_break_confirmed(candles, candle_idx, 'high', swing_high_price):
                     higher_highs.append({
@@ -125,7 +123,7 @@ class StructureBreakIndicator(Indicator):
                         higher_highs[-1]['timestamp'] = candle['timestamp']
             
             # Lower Low detection
-            if candle['low'] < swing_low_price - min_break_value:
+            if candle['low'] < swing_low_price - min_break_low:
                 # Check if confirmed by N candles staying below
                 if self._is_break_confirmed(candles, candle_idx, 'low', swing_low_price):
                     lower_lows.append({
@@ -143,7 +141,7 @@ class StructureBreakIndicator(Indicator):
             
             # Higher Low detection
             # Need to have a previous swing low and current low should be higher
-            if candle['low'] > swing_low_price + min_break_value:
+            if candle['low'] > swing_low_price + min_break_low:
                 # No confirmation needed for HL/LH since they're not actual "breaks"
                 higher_lows.append({
                     'index': candle_idx,
@@ -160,7 +158,7 @@ class StructureBreakIndicator(Indicator):
             
             # Lower High detection
             # Need to have a previous swing high and current high should be lower
-            if candle['high'] < swing_high_price - min_break_value:
+            if candle['high'] < swing_high_price - min_break_high:
                 lower_highs.append({
                     'index': candle_idx,
                     'candle': candle.copy(),
