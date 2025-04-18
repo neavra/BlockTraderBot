@@ -2,6 +2,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from strategy.dto.indicator_result_dto import IndicatorResultDto
+from shared.domain.dto.candle_dto import CandleDto
+from strategy.dto.bos_dto import StructureBreakDto
+from strategy.dto.fvg_dto import FvgDto
+from strategy.dto.doji_dto import DojiDto
 
 
 @dataclass
@@ -11,16 +15,14 @@ class OrderBlockDto:
     price_high: float
     price_low: float
     index: int
-    wick_ratio: float
-    body_ratio: float
-    candle: Dict[str, Any]
-    related_fvg: Optional[Dict[str, Any]] = None
-    is_doji: bool = False
-    timestamp: Optional[datetime] = None
-    doji_data: Optional[Dict[str, Any]] = None
-    bos_data: Optional[Dict[str, Any]] = None
+    candle: CandleDto
+    related_fvg: FvgDto
+    is_doji: bool
+    timestamp: datetime
+    doji_data: DojiDto
+    bos_data: StructureBreakDto
     status: str
-    touched: bool = False
+    touched: bool
     mitigation_percentage: float
     created_at:datetime
     

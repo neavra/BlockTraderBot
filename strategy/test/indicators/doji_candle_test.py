@@ -92,19 +92,19 @@ class TestDojiCandleIndicator(unittest.TestCase):
         ]
         
         # Convert CandleDto objects to dictionaries for testing
-        self.candle_dicts = [self._candle_to_dict(candle) for candle in self.candles]
+        # self.candle_dicts = [self._candle_to_dict(candle) for candle in self.candles]
     
-    def _candle_to_dict(self, candle: CandleDto) -> dict:
-        """Convert a CandleDto to a dictionary for the indicator."""
-        candle_dict = {
-            'open': candle.open,
-            'high': candle.high,
-            'low': candle.low,
-            'close': candle.close,
-            'volume': candle.volume,
-            'timestamp': candle.timestamp
-        }
-        return candle_dict
+    # def _candle_to_dict(self, candle: CandleDto) -> dict:
+    #     """Convert a CandleDto to a dictionary for the indicator."""
+    #     candle_dict = {
+    #         'open': candle.open,
+    #         'high': candle.high,
+    #         'low': candle.low,
+    #         'close': candle.close,
+    #         'volume': candle.volume,
+    #         'timestamp': candle.timestamp
+    #     }
+    #     return candle_dict
     
     def test_initialization(self):
         """Test initialization with default and custom parameters."""
@@ -129,7 +129,7 @@ class TestDojiCandleIndicator(unittest.TestCase):
 
             
             # Test with insufficient candles (less than 3)
-            result = await self.indicator.calculate({'candles': self.candle_dicts[:2]})
+            result = await self.indicator.calculate({'candles': self.candles[:2]})
             self.assertEqual(len(result.dojis), 0)
             self.assertFalse(result.has_doji)
             self.assertIsNone(result.latest_doji)
@@ -140,7 +140,7 @@ class TestDojiCandleIndicator(unittest.TestCase):
         """Test doji detection with default parameters."""
         async def run_test():
             # Calculate with all candles
-            result = await self.indicator.calculate({'candles': self.candle_dicts})
+            result = await self.indicator.calculate(self.candles)
             
             # There should be 2 dojis with default parameters (the first and last candles)
             self.assertEqual(len(result.dojis), 2)
@@ -170,7 +170,7 @@ class TestDojiCandleIndicator(unittest.TestCase):
         """Test doji detection with custom parameters."""
         async def run_test():
             # Calculate with all candles using custom parameters
-            result = await self.custom_indicator.calculate({'candles': self.candle_dicts})
+            result = await self.custom_indicator.calculate(self.candles)
             
             # With more permissive parameters, we should detect more dojis
             self.assertTrue(len(result.dojis) >= 2)
@@ -208,13 +208,10 @@ class TestDojiCandleIndicator(unittest.TestCase):
                 is_closed=True
             )
             
-            # Convert to dictionary
-            zero_range_dict = self._candle_to_dict(zero_range_candle)
-            
-            test_candles = self.candle_dicts + [zero_range_dict]
+            test_candles = self.candles + [zero_range_candle]
             
             # The indicator should handle this without errors
-            result = await self.indicator.calculate({'candles': test_candles})
+            result = await self.indicator.calculate(test_candles)
             
             # Zero range candle should be skipped (not causing errors)
             self.assertEqual(len(result.dojis), 2)
@@ -243,9 +240,9 @@ class TestDojiCandleIndicator(unittest.TestCase):
         """Test that dojis are sorted correctly (most recent first)."""
         async def run_test():
             # Reverse the candle order to ensure sorting works
-            reversed_candles = list(reversed(self.candle_dicts))
+            reversed_candles = list(reversed(self.candles))
             
-            result = await self.indicator.calculate({'candles': reversed_candles})
+            result = await self.indicator.calculate(reversed_candles)
             
             # Check that dojis are sorted by index (descending)
             if len(result.dojis) >= 2:

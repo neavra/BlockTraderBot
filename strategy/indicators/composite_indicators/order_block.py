@@ -3,6 +3,10 @@ from datetime import datetime, timezone
 from strategy.indicators.base import Indicator
 from strategy.dto.order_block_dto import OrderBlockDto, OrderBlockResultDto
 import logging
+from shared.domain.dto.candle_dto import CandleDto
+from strategy.dto.bos_dto import StructureBreakDto, StructureBreakResultDto
+from strategy.dto.fvg_dto import FvgDto, FvgResultDto
+from strategy.dto.doji_dto import DojiDto, DojiResultDto
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +56,7 @@ class OrderBlockIndicator(Indicator):
             
         super().__init__(default_params)
     
-    async def calculate(self, data: Dict[str, Any]) -> OrderBlockResultDto:
+    async def calculate(self, candles: List[CandleDto], fvg_data: FvgResultDto, doji_data: DojiResultDto, bos_data: StructureBreakResultDto) -> OrderBlockResultDto:
         """
         Detect order blocks in the provided candle data by combining insights from
         doji candles, FVG, and BOS indicators.
@@ -69,10 +73,6 @@ class OrderBlockIndicator(Indicator):
         Returns:
             OrderBlockResultDto with detected order blocks
         """
-        candles = data.get('candles', [])
-        fvg_data = data.get('fvg_data', {})
-        doji_data = data.get('doji_data', {})
-        bos_data = data.get('bos_data', {})
         
         # Need enough candles to detect order blocks
         if len(candles) < 5:
@@ -83,56 +83,26 @@ class OrderBlockIndicator(Indicator):
         if not doji_data:
             logger.warning("No doji data provided, order blocks require doji candles")
             return self._get_empty_result()
-            
-        # Get dojis, handling both DTO and dictionary formats
-        if hasattr(doji_data, 'dojis'):
-            # DTO format
-            doji_candles = doji_data.dojis
-            # Convert to dictionaries for compatibility if needed
-            doji_candles = [doji.to_dict() if hasattr(doji, 'to_dict') else doji for doji in doji_candles]
-        else:
-            # Dictionary format
-            doji_candles = doji_data.get('dojis', [])
-            
-        if not doji_candles:
-            logger.warning("No doji candles detected, order blocks require doji candles")
+        doji_candles = doji_data.dojis
+        # Get FVG data
+        if not fvg_data:
+            logger.warning("No fvg data provided, order blocks require fvg candles")
             return self._get_empty_result()
+        bullish_fvgs = fvg_data.bullish_fvgs
+        bearish_fvgs = fvg_data.bearish_fvgs
         
-        # Get FVG data, handling both DTO and dictionary formats
-        if hasattr(fvg_data, 'bullish_fvgs') and hasattr(fvg_data, 'bearish_fvgs'):
-            # DTO format
-            bullish_fvgs = fvg_data.bullish_fvgs
-            bearish_fvgs = fvg_data.bearish_fvgs
-            # Convert to dictionaries for compatibility
-            bullish_fvgs = [fvg.to_dict() if hasattr(fvg, 'to_dict') else fvg for fvg in bullish_fvgs]
-            bearish_fvgs = [fvg.to_dict() if hasattr(fvg, 'to_dict') else fvg for fvg in bearish_fvgs]
-        else:
-            # Dictionary format
-            bullish_fvgs = fvg_data.get('bullish_fvgs', [])
-            bearish_fvgs = fvg_data.get('bearish_fvgs', [])
-        
-        # Get BOS data, handling both DTO and dictionary formats
-        if hasattr(bos_data, 'bullish_breaks') and hasattr(bos_data, 'bearish_breaks'):
-            # New DTO format
-            bullish_bos = bos_data.bullish_breaks
-            bearish_bos = bos_data.bearish_breaks
-            # Convert to dictionaries for compatibility
-            bullish_bos = [bos.to_dict() if hasattr(bos, 'to_dict') else bos for bos in bullish_bos]
-            bearish_bos = [bos.to_dict() if hasattr(bos, 'to_dict') else bos for bos in bearish_bos]
-            bos_events = bullish_bos + bearish_bos
-        elif hasattr(bos_data, 'breaks'):
-            # Old DTO format with a single 'breaks' list
-            bos_events = bos_data.breaks
-            # Convert to dictionaries for compatibility
-            bos_events = [bos.to_dict() if hasattr(bos, 'to_dict') else bos for bos in bos_events]
-        else:
-            # Dictionary format
-            bos_events = bos_data.get('breaks', []) if bos_data else []
-        
+        # Get BOS data
+        if not bos_data:
+            logger.warning("No bos data provided, order blocks require bos candles")
+            return self._get_empty_result()
+        bullish_bos = bos_data.bullish_breaks
+        bearish_bos = bos_data.bearish_breaks
+        bos_events = bullish_bos + bearish_bos
+
         # Detect order blocks based on composite analysis with the specific sequence:
         # Doji candle -> FVG -> BOS
         demand_blocks, supply_blocks = self._detect_order_blocks(
-            candles, doji_candles, bullish_fvgs, bearish_fvgs, bos_events
+            candles, doji_candles, bullish_fvgs, bearish_fvgs, bullish_bos, bearish_bos
         )
         
         # Sort blocks by index (most recent first)
@@ -148,11 +118,13 @@ class OrderBlockIndicator(Indicator):
         )
     
     def _detect_order_blocks(self, 
-                             candles: List[Dict[str, Any]],
-                             doji_candles: List[Dict[str, Any]],
-                             bullish_fvgs: List[Dict[str, Any]],
-                             bearish_fvgs: List[Dict[str, Any]],
-                             bos_events: List[Dict[str, Any]]) -> Tuple[List[OrderBlockDto], List[OrderBlockDto]]:
+                             candles: List[CandleDto],
+                             doji_candles: List[DojiDto],
+                             bullish_fvgs: List[FvgDto],
+                             bearish_fvgs: List[FvgDto],
+                             bullish_bos: List[StructureBreakDto],
+                             bearish_bos: List[StructureBreakDto]
+                             ) -> Tuple[List[OrderBlockDto], List[OrderBlockDto]]:
         """
         Core order block detection logic, following the specific sequence:
         1. Identify doji candles
@@ -176,44 +148,36 @@ class OrderBlockIndicator(Indicator):
         max_detection_window = self.params['max_detection_window']
         require_bos = self.params['require_bos']
         
-        # Group BOS events by type for efficient lookup
-        bullish_bos = [b for b in bos_events if b.get('break_type') in ['higher_high', 'higher_low']]
-        bearish_bos = [b for b in bos_events if b.get('break_type') in ['lower_low', 'lower_high']]
-                
         # Group dojis by direction (bearish/bullish)
-        bearish_dojis = []  # Red dojis
-        bullish_dojis = []  # Green dojis
+        bearish_dojis: List[DojiDto] = []  # Red dojis
+        bullish_dojis: List[DojiDto] = []  # Green dojis
         
         for doji in doji_candles:
-            doji_idx = doji['index']
+            doji_idx = doji.index
             if doji_idx >= len(candles) or doji_idx < 0:
                 continue  # Skip invalid indices
                 
-            doji_candle = doji['candle']
+            doji_candle = doji.candle
             # Determine doji direction (bearish/red or bullish/green)
-            if doji_candle['close'] < doji_candle['open']:
+            if doji_candle.close < doji_candle.open:
                 bearish_dojis.append(doji)
-            elif doji_candle['close'] > doji_candle['open']:
+            elif doji_candle.close > doji_candle.open:
                 bullish_dojis.append(doji)
-        
-        # Sort dojis by index (most recent first for later selection when multiple dojis exist)
-        bearish_dojis.sort(key=lambda x: x['index'], reverse=True)
-        bullish_dojis.sort(key=lambda x: x['index'], reverse=True)
         
         # Process demand order blocks (bearish doji -> bullish FVG -> bullish BOS)
         processed_fvgs = set()  # Track processed FVGs to avoid duplicates
         
         for doji in bearish_dojis:
-            doji_idx = doji['index']
-            doji_candle = doji['candle']
+            doji_idx = doji.index
+            doji_candle = doji.candle
             
             # Find bullish FVGs within the detection window after this doji
             for fvg in bullish_fvgs:
-                fvg_idx = fvg.get('candle_index', 0)
+                fvg_idx = fvg.candle_index
                 
                 # Check if FVG is within detection window after the doji
                 # and hasn't been processed yet
-                fvg_id = f"{fvg_idx}_{fvg.get('top', 0)}_{fvg.get('bottom', 0)}"
+                fvg_id = f"{fvg_idx}_{fvg.top}_{fvg.bottom}"
                 if 0 < fvg_idx - doji_idx <= max_detection_window and fvg_id not in processed_fvgs:
                     # If BOS is required, check for a bullish BOS after the FVG
                     bos_found = False if require_bos else True
@@ -221,7 +185,7 @@ class OrderBlockIndicator(Indicator):
                     
                     if require_bos:
                         for bos in bullish_bos:
-                            bos_idx = bos.get('index', 0)
+                            bos_idx = bos.index
                             # BOS should occur within the detection window after the FVG
                             if 0 < bos_idx - fvg_idx <= max_detection_window:
                                 bos_found = True
@@ -231,16 +195,14 @@ class OrderBlockIndicator(Indicator):
                     if bos_found:
                         # We found a complete demand order block pattern
                         # (bearish doji -> bullish FVG -> bullish BOS)
-                        timestamp = doji_candle.get('timestamp')
+                        timestamp = doji_candle.timestamp
                         
                         demand_block = OrderBlockDto(
                             type='demand',
-                            price_high=doji_candle['open'],
-                            price_low=doji_candle['close'],
+                            price_high=doji_candle.open,
+                            price_low=doji_candle.close,
                             index=doji_idx,
-                            wick_ratio=doji.get('wick_ratio', 0.0),
-                            body_ratio=doji.get('body_ratio', 0.0),
-                            candle=doji_candle.copy(),
+                            candle=doji_candle,
                             is_doji=True,
                             timestamp=timestamp,
                             doji_data=doji,
@@ -262,16 +224,16 @@ class OrderBlockIndicator(Indicator):
         processed_fvgs = set()  # Reset processed FVGs for supply blocks
         
         for doji in bullish_dojis:
-            doji_idx = doji['index']
-            doji_candle = doji['candle']
+            doji_idx = doji.index
+            doji_candle = doji.candle
             
             # Find bearish FVGs within the detection window after this doji
             for fvg in bearish_fvgs:
-                fvg_idx = fvg.get('candle_index', 0)
+                fvg_idx = fvg.candle_index
                 
                 # Check if FVG is within detection window after the doji
                 # and hasn't been processed yet
-                fvg_id = f"{fvg_idx}_{fvg.get('top', 0)}_{fvg.get('bottom', 0)}"
+                fvg_id = f"{fvg_idx}_{fvg.top}_{fvg.bottom}"
                 if 0 < fvg_idx - doji_idx <= max_detection_window and fvg_id not in processed_fvgs:
                     # If BOS is required, check for a bearish BOS after the FVG
                     bos_found = False if require_bos else True
@@ -279,7 +241,7 @@ class OrderBlockIndicator(Indicator):
                     
                     if require_bos:
                         for bos in bearish_bos:
-                            bos_idx = bos.get('index', 0)
+                            bos_idx = bos.index
                             # BOS should occur within the detection window after the FVG
                             if 0 < bos_idx - fvg_idx <= max_detection_window:
                                 bos_found = True
@@ -289,16 +251,14 @@ class OrderBlockIndicator(Indicator):
                     if bos_found:
                         # We found a complete supply order block pattern
                         # (bullish doji -> bearish FVG -> bearish BOS)
-                        timestamp = doji_candle.get('timestamp')
+                        timestamp = doji_candle.timestamp
                         
                         supply_block = OrderBlockDto(
                             type='supply',
-                            price_high=doji_candle['close'],
-                            price_low=doji_candle['open'],
+                            price_high=doji_candle.close,
+                            price_low=doji_candle.open,
                             index=doji_idx,
-                            wick_ratio=doji.get('wick_ratio', 0.0),
-                            body_ratio=doji.get('body_ratio', 0.0),
-                            candle=doji_candle.copy(),
+                            candle=doji_candle,
                             is_doji=True,
                             timestamp=timestamp,
                             doji_data=doji,
@@ -318,7 +278,7 @@ class OrderBlockIndicator(Indicator):
         
         return demand_blocks, supply_blocks
     
-    def check_mitigation(self, order_block: OrderBlockDto, candles: List[Dict[str, Any]]) -> OrderBlockDto:
+    def check_mitigation(self, order_block: OrderBlockDto, candles: List[CandleDto]) -> OrderBlockDto:
         """
         Check if an order block has been mitigated by new candles.
         
@@ -425,7 +385,7 @@ class OrderBlockIndicator(Indicator):
         
         return order_block
     
-    def process_existing_order_blocks(self, existing_blocks: List[OrderBlockDto], candles: List[Dict[str, Any]]) -> Tuple[List[OrderBlockDto], List[OrderBlockDto]]:
+    def process_existing_order_blocks(self, existing_blocks: List[OrderBlockDto], candles: List[CandleDto]) -> Tuple[List[OrderBlockDto], List[OrderBlockDto]]:
         """
         Process existing order blocks for mitigation with new candles.
         

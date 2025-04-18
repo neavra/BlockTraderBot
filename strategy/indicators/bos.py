@@ -2,6 +2,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 from .base import Indicator
 from strategy.dto.bos_dto import StructureBreakDto, StructureBreakResultDto
+from shared.domain.dto.candle_dto import CandleDto
 import logging
 
 logger = logging.getLogger(__name__)
@@ -41,7 +42,7 @@ class StructureBreakIndicator(Indicator):
             
         super().__init__(default_params)
     
-    async def calculate(self, data: Dict[str, Any]) -> StructureBreakResultDto:
+    async def calculate(self, candles: List[CandleDto], market_context: Dict[str,Any]) -> StructureBreakResultDto:
         """
         Detect Breaking of Structure events in the provided data
         
@@ -53,8 +54,6 @@ class StructureBreakIndicator(Indicator):
         Returns:
             StructureBreakResultDto with detected structure breaks
         """
-        candles = data.get('candles', [])
-        market_context = data.get('market_context', {})
         
         # Need enough candles to analyze
         if len(candles) < 3:
@@ -100,60 +99,60 @@ class StructureBreakIndicator(Indicator):
                 break
                 
             candle = candles[candle_idx]
-            timestamp = candle.get('timestamp')
+            timestamp = candle.timestamp
             
             # Higher High detection (bullish)
-            if candle['high'] > swing_high_price + min_break_high:
+            if candle.high > swing_high_price + min_break_high:
                 # Check if confirmed by N candles staying above
                 if self._is_break_confirmed(candles, candle_idx, 'high', swing_high_price):
                     bullish_breaks.append(StructureBreakDto(
                         index=candle_idx,
                         break_type='higher_high',
-                        break_value=candle['high'] - swing_high_price,
-                        break_percentage=(candle['high'] - swing_high_price) / swing_high_price,
+                        break_value=candle.high - swing_high_price,
+                        break_percentage=(candle.high - swing_high_price) / swing_high_price,
                         swing_reference=swing_high_price,
-                        candle=candle.copy(),
+                        candle=candle,
                         timestamp=timestamp
                     ))
             
             # Lower Low detection (bearish)
-            if candle['low'] < swing_low_price - min_break_low:
+            if candle.low < swing_low_price - min_break_low:
                 # Check if confirmed by N candles staying below
                 if self._is_break_confirmed(candles, candle_idx, 'low', swing_low_price):
                     bearish_breaks.append(StructureBreakDto(
                         index=candle_idx,
                         break_type='lower_low',
-                        break_value=swing_low_price - candle['low'],
-                        break_percentage=(swing_low_price - candle['low']) / swing_low_price,
+                        break_value=swing_low_price - candle.low,
+                        break_percentage=(swing_low_price - candle.low) / swing_low_price,
                         swing_reference=swing_low_price,
-                        candle=candle.copy(),
+                        candle=candle,
                         timestamp=timestamp
                     ))
             
             # Higher Low detection (bullish)
             # Need to have a previous swing low and current low should be higher
-            if candle['low'] > swing_low_price + min_break_low:
+            if candle.low > swing_low_price + min_break_low:
                 # No confirmation needed for HL/LH since they're not actual "breaks"
                 bullish_breaks.append(StructureBreakDto(
                     index=candle_idx,
                     break_type='higher_low',
-                    break_value=candle['low'] - swing_low_price,
-                    break_percentage=(candle['low'] - swing_low_price) / swing_low_price,
+                    break_value=candle.low - swing_low_price,
+                    break_percentage=(candle.low - swing_low_price) / swing_low_price,
                     swing_reference=swing_low_price,
-                    candle=candle.copy(),
+                    candle=candle,
                     timestamp=timestamp
                 ))
             
             # Lower High detection (bearish)
             # Need to have a previous swing high and current high should be lower
-            if candle['high'] < swing_high_price - min_break_high:
+            if candle.high < swing_high_price - min_break_high:
                 bearish_breaks.append(StructureBreakDto(
                     index=candle_idx,
                     break_type='lower_high',
-                    break_value=swing_high_price - candle['high'],
-                    break_percentage=(swing_high_price - candle['high']) / swing_high_price,
+                    break_value=swing_high_price - candle.high,
+                    break_percentage=(swing_high_price - candle.high) / swing_high_price,
                     swing_reference=swing_high_price,
-                    candle=candle.copy(),
+                    candle=candle,
                     timestamp=timestamp
                 ))
         
@@ -169,7 +168,7 @@ class StructureBreakIndicator(Indicator):
             bearish_breaks=bearish_breaks
         )
     
-    def _is_break_confirmed(self, candles: List[Dict[str, Any]], break_idx: int, 
+    def _is_break_confirmed(self, candles: List[CandleDto], break_idx: int, 
                             price_type: str, reference_price: float) -> bool:
         """
         Check if a structure break is confirmed by subsequent candles
@@ -199,10 +198,10 @@ class StructureBreakIndicator(Indicator):
                 break
                 
             # For higher high breaks, check if highs remain above the reference
-            if price_type == 'high' and candles[i]['high'] > reference_price:
+            if price_type == 'high' and candles[i].high > reference_price:
                 confirmed_count += 1
             # For lower low breaks, check if lows remain below the reference
-            elif price_type == 'low' and candles[i]['low'] < reference_price:
+            elif price_type == 'low' and candles[i].low < reference_price:
                 confirmed_count += 1
             else:
                 # Break confirmed streak

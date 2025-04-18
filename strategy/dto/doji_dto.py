@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from strategy.dto.indicator_result_dto import IndicatorResultDto
+from shared.domain.dto.candle_dto import CandleDto
 
 
 @dataclass
@@ -11,7 +12,7 @@ class DojiDto:
     body_to_range_ratio: float
     total_wick_size: float
     strength: float
-    candle: Dict[str, Any]
+    candle: CandleDto
     timestamp: Optional[datetime] = None
     
     def to_dict(self) -> Dict[str, Any]:

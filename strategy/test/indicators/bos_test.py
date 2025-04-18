@@ -111,11 +111,11 @@ class TestStructureBreakIndicator(unittest.TestCase):
         ])]
         
         # Convert all candle lists to dictionaries for testing
-        self.hh_candle_dicts = [self._candle_to_dict(candle) for candle in self.hh_candles]
-        self.ll_candle_dicts = [self._candle_to_dict(candle) for candle in self.ll_candles]
-        self.hl_candle_dicts = [self._candle_to_dict(candle) for candle in self.hl_candles]
-        self.lh_candle_dicts = [self._candle_to_dict(candle) for candle in self.lh_candles]
-        self.no_bos_candle_dicts = [self._candle_to_dict(candle) for candle in self.no_bos_candles]
+        # self.hh_candle_dicts = [self._candle_to_dict(candle) for candle in self.hh_candles]
+        # self.ll_candle_dicts = [self._candle_to_dict(candle) for candle in self.ll_candles]
+        # self.hl_candle_dicts = [self._candle_to_dict(candle) for candle in self.hl_candles]
+        # self.lh_candle_dicts = [self._candle_to_dict(candle) for candle in self.lh_candles]
+        # self.no_bos_candle_dicts = [self._candle_to_dict(candle) for candle in self.no_bos_candles]
     
     def _create_candle(self, index: int, data: Dict[str, Any]) -> CandleDto:
         """Create a CandleDto object with given parameters."""
@@ -123,7 +123,7 @@ class TestStructureBreakIndicator(unittest.TestCase):
             symbol="BTCUSDT",
             exchange="binance",
             timeframe="1h",
-            timestamp=data['dt'].replace(tzinfo=timezone.utc),
+            timestamp=data['dt'],
             open=data['o'],
             high=data['h'],
             low=data['l'],
@@ -132,16 +132,16 @@ class TestStructureBreakIndicator(unittest.TestCase):
             is_closed=True
         )
     
-    def _candle_to_dict(self, candle: CandleDto) -> Dict[str, Any]:
-        """Convert a CandleDto to a dictionary for the indicator."""
-        return {
-            'open': candle.open,
-            'high': candle.high,
-            'low': candle.low,
-            'close': candle.close,
-            'volume': candle.volume,
-            'timestamp': candle.timestamp
-        }
+    # def _candle_to_dict(self, candle: CandleDto) -> Dict[str, Any]:
+    #     """Convert a CandleDto to a dictionary for the indicator."""
+    #     return {
+    #         'open': candle.open,
+    #         'high': candle.high,
+    #         'low': candle.low,
+    #         'close': candle.close,
+    #         'volume': candle.volume,
+    #         'timestamp': candle.timestamp
+    #     }
     
     def test_initialization(self):
         """Test initialization with default and custom parameters."""
@@ -159,10 +159,7 @@ class TestStructureBreakIndicator(unittest.TestCase):
         """Test behavior with empty or insufficient candles."""
         async def run_test():
             # Test with empty candles
-            result = await self.indicator.calculate({
-                'candles': [],
-                'market_context': self.market_context
-            })
+            result = await self.indicator.calculate([], self.market_context)
             self.assertEqual(len(result.bullish_breaks), 0)
             self.assertEqual(len(result.bearish_breaks), 0)
             self.assertFalse(result.has_bullish_break)
@@ -170,10 +167,7 @@ class TestStructureBreakIndicator(unittest.TestCase):
             self.assertIsNone(result.latest_break)
             
             # Test with insufficient candles (less than 3)
-            result = await self.indicator.calculate({
-                'candles': self.hh_candle_dicts[:2],
-                'market_context': self.market_context
-            })
+            result = await self.indicator.calculate(self.hh_candles[:2], self.market_context)
             self.assertEqual(len(result.bullish_breaks), 0)
             self.assertEqual(len(result.bearish_breaks), 0)
             self.assertFalse(result.has_bullish_break)
@@ -185,21 +179,8 @@ class TestStructureBreakIndicator(unittest.TestCase):
     def test_missing_market_context(self):
         """Test behavior with missing market context."""
         async def run_test():
-            # Test with no market context
-            result = await self.indicator.calculate({
-                'candles': self.hh_candle_dicts
-            })
-            self.assertEqual(len(result.bullish_breaks), 0)
-            self.assertEqual(len(result.bearish_breaks), 0)
-            self.assertFalse(result.has_bullish_break)
-            self.assertFalse(result.has_bearish_break)
-            self.assertIsNone(result.latest_break)
-            
             # Test with empty market context
-            result = await self.indicator.calculate({
-                'candles': self.hh_candle_dicts,
-                'market_context': {}
-            })
+            result = await self.indicator.calculate(self.hh_candles, {})
             self.assertEqual(len(result.bullish_breaks), 0)
             self.assertEqual(len(result.bearish_breaks), 0)
             self.assertFalse(result.has_bullish_break)
@@ -207,10 +188,7 @@ class TestStructureBreakIndicator(unittest.TestCase):
             self.assertIsNone(result.latest_break)
             
             # Test with invalid swing points
-            result = await self.indicator.calculate({
-                'candles': self.hh_candle_dicts,
-                'market_context': {'swing_high': {}, 'swing_low': {}}
-            })
+            result = await self.indicator.calculate(self.hh_candles,{'swing_high': {}, 'swing_low': {}})
             self.assertEqual(len(result.bullish_breaks), 0)
             self.assertEqual(len(result.bearish_breaks), 0)
             self.assertFalse(result.has_bullish_break)
@@ -223,10 +201,7 @@ class TestStructureBreakIndicator(unittest.TestCase):
         """Test detection of Higher High (HH) breakouts."""
         async def run_test():
             # Calculate with Higher High scenario
-            result = await self.indicator.calculate({
-                'candles': self.hh_candle_dicts,
-                'market_context': self.market_context
-            })
+            result = await self.indicator.calculate(self.hh_candles, self.market_context)
             
             # Verify a bullish break was detected
             self.assertTrue(result.has_bullish_break)
@@ -253,10 +228,7 @@ class TestStructureBreakIndicator(unittest.TestCase):
         """Test detection of Lower Low (LL) breakouts."""
         async def run_test():
             # Calculate with Lower Low scenario
-            result = await self.indicator.calculate({
-                'candles': self.ll_candle_dicts,
-                'market_context': self.market_context
-            })
+            result = await self.indicator.calculate(self.ll_candles, self.market_context)
             
             # Verify a bearish break was detected
             self.assertTrue(result.has_bearish_break)
@@ -283,10 +255,7 @@ class TestStructureBreakIndicator(unittest.TestCase):
         """Test detection of Higher Lows (HL)."""
         async def run_test():
             # Calculate with Higher Low scenario
-            result = await self.indicator.calculate({
-                'candles': self.hl_candle_dicts,
-                'market_context': self.market_context
-            })
+            result = await self.indicator.calculate(self.hl_candles, self.market_context)
             
             # Verify a bullish structural element was detected
             self.assertTrue(result.has_bullish_break)
@@ -310,10 +279,7 @@ class TestStructureBreakIndicator(unittest.TestCase):
         """Test detection of Lower Highs (LH)."""
         async def run_test():
             # Calculate with Lower High scenario
-            result = await self.indicator.calculate({
-                'candles': self.lh_candle_dicts,
-                'market_context': self.market_context
-            })
+            result = await self.indicator.calculate(self.lh_candles, self.market_context)
             
             # Verify a bearish structural element was detected
             self.assertTrue(result.has_bearish_break)
@@ -337,10 +303,7 @@ class TestStructureBreakIndicator(unittest.TestCase):
         """Test behavior when no BOS events are present."""
         async def run_test():
             # Calculate with No BOS scenario
-            result = await self.indicator.calculate({
-                'candles': self.no_bos_candle_dicts,
-                'market_context': self.market_context
-            })
+            result = await self.indicator.calculate(self.no_bos_candles, self.market_context)
             
             # There should be no higher highs or lower lows detected
             self.assertEqual(len(result.higher_highs), 0)
@@ -355,49 +318,40 @@ class TestStructureBreakIndicator(unittest.TestCase):
         async def run_test():
             # Let's create a more controlled test case specifically for confirmations
             # Create candles where there's a clear breakout followed by confirmations
-            breakout_candles = [
-                {'open': 100, 'high': 102, 'low': 98, 'close': 101, 'timestamp': datetime(2023, 1, 1, 0, 0, tzinfo=timezone.utc)},
-                {'open': 101, 'high': 103, 'low': 99, 'close': 102, 'timestamp': datetime(2023, 1, 1, 1, 0, tzinfo=timezone.utc)},
+            breakout_candles = [self._create_candle(i, data) for i, data in enumerate([
+                {'o': 100, 'h': 102, 'l': 98, 'c': 101, 'dt': datetime(2023, 1, 1, 0, 0, tzinfo=timezone.utc)},
+                {'o': 101, 'h': 103, 'l': 99, 'c': 102, 'dt': datetime(2023, 1, 1, 1, 0, tzinfo=timezone.utc)},
                 # Candle that breaks above swing high (105.0)
-                {'open': 102, 'high': 106, 'low': 101, 'close': 105, 'timestamp': datetime(2023, 1, 1, 2, 0, tzinfo=timezone.utc)},
+                {'o': 102, 'h': 106, 'l': 101, 'c': 105, 'dt': datetime(2023, 1, 1, 2, 0, tzinfo=timezone.utc)},
                 # First confirmation candle
-                {'open': 105, 'high': 107, 'low': 104, 'close': 106, 'timestamp': datetime(2023, 1, 1, 3, 0, tzinfo=timezone.utc)},
+                {'o': 105, 'h': 107, 'l': 104, 'c': 106, 'dt': datetime(2023, 1, 1, 3, 0, tzinfo=timezone.utc)},
                 # Second confirmation candle
-                {'open': 106, 'high': 108, 'low': 105, 'close': 107, 'timestamp': datetime(2023, 1, 1, 4, 0, tzinfo=timezone.utc)}
-            ]
+                {'o': 106, 'h': 108, 'l': 105, 'c': 107, 'dt': datetime(2023, 1, 1, 4, 0, tzinfo=timezone.utc)}
+            ])]
             
             # Test with 1 confirmation (default indicator)
             one_confirmation = breakout_candles[:4]  # Up to and including first confirmation
-            default_result = await self.indicator.calculate({
-                'candles': one_confirmation,
-                'market_context': self.market_context
-            })
+            default_result = await self.indicator.calculate(one_confirmation, self.market_context)
             
             # Default indicator (1 confirmation) should detect the break
             self.assertGreaterEqual(len(default_result.higher_highs), 1)
             if len(default_result.higher_highs) > 0:
-                self.assertEqual(default_result.higher_highs[0].candle['high'], 106)  # The breakout candle's high
+                self.assertEqual(default_result.higher_highs[0].candle.high, 106)  # The breakout candle's high
             
             # With custom indicator (2 confirmations needed)
-            custom_result = await self.custom_indicator.calculate({
-                'candles': one_confirmation,
-                'market_context': self.market_context
-            })
+            custom_result = await self.custom_indicator.calculate(one_confirmation, self.market_context)
             
             # Custom indicator should not detect (needs 2 confirmations)
             self.assertEqual(len(custom_result.higher_highs), 0)
             
             # Now test with two confirmations available
             two_confirmations = breakout_candles
-            full_custom_result = await self.custom_indicator.calculate({
-                'candles': two_confirmations,
-                'market_context': self.market_context
-            })
+            full_custom_result = await self.custom_indicator.calculate(two_confirmations, self.market_context)
             
             # Custom indicator should now detect with 2 confirmations
             self.assertGreaterEqual(len(full_custom_result.higher_highs), 1)
             if len(full_custom_result.higher_highs) > 0:
-                self.assertEqual(full_custom_result.higher_highs[0].candle['high'], 106)  # The breakout candle's high
+                self.assertEqual(full_custom_result.higher_highs[0].candle.high, 106)  # The breakout candle's high
             
         asyncio.run(run_test())
     
@@ -405,23 +359,17 @@ class TestStructureBreakIndicator(unittest.TestCase):
         """Test behavior with different break thresholds."""
         async def run_test():
             # Create a candle list with a marginal higher high
-            marginal_hh_candles = [candle.copy() for candle in self.hh_candle_dicts]
+            marginal_hh_candles = [candle for candle in self.hh_candles]
             
             # Modify the breakout candle to have a very small break
             breakout_idx = 8  # The candle that breaks
-            marginal_hh_candles[breakout_idx]['high'] = 105.06  # Just 0.06 above swing high (105.0)
+            marginal_hh_candles[breakout_idx].high = 105.06  # Just 0.06 above swing high (105.0)
             
             # With default indicator (0.05% threshold)
-            default_result = await self.indicator.calculate({
-                'candles': marginal_hh_candles,
-                'market_context': self.market_context
-            })
+            default_result = await self.indicator.calculate(marginal_hh_candles, self.market_context)
             
             # With custom indicator (0.1% threshold)
-            custom_result = await self.custom_indicator.calculate({
-                'candles': marginal_hh_candles,
-                'market_context': self.market_context
-            })
+            custom_result = await self.custom_indicator.calculate(marginal_hh_candles, self.market_context)
             
             # Default indicator should detect the break (0.05% threshold)
             self.assertGreaterEqual(len(default_result.higher_highs), 1)
@@ -436,12 +384,9 @@ class TestStructureBreakIndicator(unittest.TestCase):
         async def run_test():
             # Create a scenario with multiple breaks
             # Combine candles from different scenarios
-            combined_candles = self.hh_candle_dicts + self.ll_candle_dicts[5:]  # Add some lower lows after higher highs
+            combined_candles = self.hh_candles + self.ll_candles[5:]  # Add some lower lows after higher highs
             
-            result = await self.indicator.calculate({
-                'candles': combined_candles,
-                'market_context': self.market_context
-            })
+            result = await self.indicator.calculate(combined_candles, self.market_context)
             
             # Check that bullish breaks are sorted by index (descending)
             if len(result.bullish_breaks) >= 2:

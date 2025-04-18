@@ -1,6 +1,7 @@
 from typing import Dict, Any, List
 from datetime import datetime, timezone
 from strategy.indicators.base import Indicator
+from shared.domain.dto.candle_dto import CandleDto
 from strategy.dto.doji_dto import DojiDto, DojiResultDto
 import logging
 
@@ -35,7 +36,7 @@ class DojiCandleIndicator(Indicator):
             
         super().__init__(default_params)
     
-    async def calculate(self, data: Dict[str, Any]) -> DojiResultDto:
+    async def calculate(self, candles: List[CandleDto]) -> DojiResultDto:
         """
         Detect Doji candle patterns in the provided data
         
@@ -47,7 +48,6 @@ class DojiCandleIndicator(Indicator):
         Returns:
             DojiResultDto with detected doji patterns
         """
-        candles = data.get('candles', [])
         
         # Need enough candles to analyze
         if len(candles) < 3:
@@ -70,8 +70,8 @@ class DojiCandleIndicator(Indicator):
             candle = candles[candle_idx]
             
             # Calculate key metrics for doji identification
-            body_size = abs(candle['close'] - candle['open'])
-            total_range = candle['high'] - candle['low']
+            body_size = abs(candle.close - candle.open)
+            total_range = candle.high - candle.low
             
             # Avoid division by zero
             if total_range == 0:
@@ -83,7 +83,7 @@ class DojiCandleIndicator(Indicator):
             total_wick_size = total_range - body_size
             
             # Check price-relative size (to filter out insignificant dojis)
-            avg_price = (candle['high'] + candle['low']) / 2
+            avg_price = (candle.high + candle.low) / 2
             range_to_price_ratio = total_range / avg_price
             
             # Basic doji qualification: small body relative to range and significant range
@@ -91,7 +91,7 @@ class DojiCandleIndicator(Indicator):
                 range_to_price_ratio >= self.params['min_range_to_price_ratio']):
                 
                 # Get timestamp if available
-                timestamp = candle.get('timestamp')
+                timestamp = candle.timestamp
                 
                 # Create doji DTO
                 doji = DojiDto(
@@ -99,7 +99,7 @@ class DojiCandleIndicator(Indicator):
                     body_to_range_ratio=body_to_range_ratio,
                     total_wick_size=total_wick_size,
                     strength=1.0 - body_to_range_ratio,  # Higher strength for smaller bodies
-                    candle=candle.copy(),
+                    candle=candle,
                     timestamp=timestamp
                 )
                 

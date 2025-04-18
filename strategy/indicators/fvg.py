@@ -2,6 +2,7 @@ from typing import Dict, Any, List
 from datetime import datetime, timezone
 from .base import Indicator
 from strategy.dto.fvg_dto import FvgDto, FvgResultDto
+from shared.domain.dto.candle_dto import CandleDto
 import logging
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ class FVGIndicator(Indicator):
             
         super().__init__(default_params)
     
-    async def calculate(self, data: Dict[str, Any]) -> FvgResultDto:
+    async def calculate(self, candles: List[CandleDto]) -> FvgResultDto:
         """
         Detect Fair Value Gaps in the provided candle data
         
@@ -47,8 +48,6 @@ class FVGIndicator(Indicator):
         Returns:
             FvgResultDto with detected bullish and bearish FVGs
         """
-        candles = data.get('candles', [])
-        current_price = data.get('current_price')
         
         # Need at least 3 candles to detect FVGs
         if len(candles) < 3:
@@ -77,57 +76,57 @@ class FVGIndicator(Indicator):
             candle_index = i - 1
             
             # Detect bullish FVG (gap up)
-            if candle_current['low'] > candle_before_previous['high']:
+            if candle_current.low > candle_before_previous.high:
                 # Calculate gap size
-                gap_size = candle_current['low'] - candle_before_previous['high']
+                gap_size = candle_current.low - candle_before_previous.high
                 
                 # Calculate gap size as percentage of price
-                gap_pct = gap_size / candle_before_previous['high']
+                gap_pct = gap_size / candle_before_previous.high
                 
                 # Skip if gap is too small
                 if gap_pct < min_gap_pct:
                     continue
                 
                 # Create bullish FVG DTO
-                timestamp = candle_current.get('timestamp', None)
+                timestamp = candle_current.timestamp
                 bullish_fvg = FvgDto(
                     type="bullish",
-                    top=candle_current['low'],
-                    bottom=candle_before_previous['high'],
+                    top=candle_current.low,
+                    bottom=candle_before_previous.high,
                     size=gap_size,
                     size_percent=gap_pct * 100,  # Convert to percentage
                     candle_index=candle_index,
                     filled=False,
                     timestamp=timestamp,
-                    candle=candle_current.copy()
+                    candle=candle_current
                 )
                 
                 bullish_fvgs.append(bullish_fvg)
             
             # Detect bearish FVG (gap down)
-            elif candle_current['high'] < candle_before_previous['low']:
+            elif candle_current.high < candle_before_previous.low:
                 # Calculate gap size
-                gap_size = candle_before_previous['low'] - candle_current['high']
+                gap_size = candle_before_previous.low - candle_current.low
                 
                 # Calculate gap size as percentage of price
-                gap_pct = gap_size / candle_before_previous['low']
+                gap_pct = gap_size / candle_before_previous.low
                 
                 # Skip if gap is too small
                 if gap_pct < min_gap_pct:
                     continue
                 
                 # Create bearish FVG DTO
-                timestamp = candle_current.get('timestamp', None)
+                timestamp = candle_current.timestamp
                 bearish_fvg = FvgDto(
                     type="bearish",
-                    top=candle_before_previous['low'],
-                    bottom=candle_current['high'],
+                    top=candle_before_previous.low,
+                    bottom=candle_current.high,
                     size=gap_size,
                     size_percent=gap_pct * 100,  # Convert to percentage
                     candle_index=candle_index,
                     filled=False,
                     timestamp=timestamp,
-                    candle=candle_current.copy()
+                    candle=candle_current
                 )
                 
                 bearish_fvgs.append(bearish_fvg)
@@ -143,7 +142,7 @@ class FVGIndicator(Indicator):
             bearish_fvgs=bearish_fvgs
         )
     
-    def _filter_filled_by_price_action(self, candles: List[Dict[str, Any]], 
+    def _filter_filled_by_price_action(self, candles: List[CandleDto], 
                                     bullish_fvgs: List[FvgDto], 
                                     bearish_fvgs: List[FvgDto]) -> None:
         """
@@ -163,7 +162,7 @@ class FVGIndicator(Indicator):
             # Check candles after FVG formation, ignore the candle right after the FVG as it forms part of the FVG
             for i in range(fvg_idx + 2, len(candles)):
                 # If price traded below the FVG top but above bottom, it's partially filled
-                if candles[i]['low'] <= fvg.top:
+                if candles[i].low <= fvg.top:
                     fvg.filled = True
                     break
         
@@ -175,7 +174,7 @@ class FVGIndicator(Indicator):
             # Check candles after FVG formation, ignore the candle right after the FVG as it forms part of the FVG
             for i in range(fvg_idx + 2, len(candles)):
                 # If price traded above the FVG bottom but below top, it's partially filled
-                if candles[i]['high'] >= fvg.bottom:
+                if candles[i].high >= fvg.bottom:
                     fvg.filled = True
                     break
     
