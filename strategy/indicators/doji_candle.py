@@ -1,5 +1,7 @@
 from typing import Dict, Any, List
+from datetime import datetime, timezone
 from strategy.indicators.base import Indicator
+from strategy.dto.doji_dto import DojiDto, DojiResultDto
 import logging
 
 logger = logging.getLogger(__name__)
@@ -33,7 +35,7 @@ class DojiCandleIndicator(Indicator):
             
         super().__init__(default_params)
     
-    async def calculate(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def calculate(self, data: Dict[str, Any]) -> DojiResultDto:
         """
         Detect Doji candle patterns in the provided data
         
@@ -43,21 +45,18 @@ class DojiCandleIndicator(Indicator):
                 - current_price: Current market price (optional)
                 
         Returns:
-            Dictionary with detected doji patterns:
-                - dojis: List of detected doji candles with details
-                - has_doji: Boolean indicating if a doji was found in recent candles
-                - latest_doji: Most recent doji candle details or None
+            DojiResultDto with detected doji patterns
         """
         candles = data.get('candles', [])
         
         # Need enough candles to analyze
         if len(candles) < 3:
             logger.warning("Not enough candles to detect doji patterns (minimum 3 required)")
-            return {
-                'dojis': [],
-                'has_doji': False,
-                'latest_doji': None
-            }
+            return DojiResultDto(
+                timestamp=datetime.now(timezone.utc),
+                indicator_name="Doji",
+                dojis=[]
+            )
         
         lookback_period = min(self.params['lookback_period'], len(candles))
         dojis = []
@@ -91,32 +90,30 @@ class DojiCandleIndicator(Indicator):
             if (body_to_range_ratio <= self.params['max_body_to_range_ratio'] and 
                 range_to_price_ratio >= self.params['min_range_to_price_ratio']):
                 
-                # Create doji object with details
-                doji = {
-                    'index': candle_idx,
-                    'body_to_range_ratio': body_to_range_ratio,
-                    'total_wick_size': total_wick_size,
-                    'candle': candle.copy(),  # Include the original candle data
-                    'strength': 1.0 - body_to_range_ratio  # Higher strength for smaller bodies
-                }
+                # Get timestamp if available
+                timestamp = candle.get('timestamp')
                 
-                # Add timestamp if available
-                if 'timestamp' in candle:
-                    doji['timestamp'] = candle['timestamp']
+                # Create doji DTO
+                doji = DojiDto(
+                    index=candle_idx,
+                    body_to_range_ratio=body_to_range_ratio,
+                    total_wick_size=total_wick_size,
+                    strength=1.0 - body_to_range_ratio,  # Higher strength for smaller bodies
+                    candle=candle.copy(),
+                    timestamp=timestamp
+                )
                 
                 dojis.append(doji)
         
         # Sort dojis by index (most recent first)
-        dojis.sort(key=lambda x: x['index'], reverse=True)
+        dojis.sort(key=lambda x: x.index, reverse=True)
         
-        # Prepare result
-        result = {
-            'dojis': dojis,
-            'has_doji': len(dojis) > 0,
-            'latest_doji': dojis[0] if dojis else None
-        }
-        
-        return result
+        # Create and return the result DTO
+        return DojiResultDto(
+            timestamp=datetime.now(timezone.utc),
+            indicator_name="Doji",
+            dojis=dojis
+        )
     
     def get_requirements(self) -> Dict[str, Any]:
         """

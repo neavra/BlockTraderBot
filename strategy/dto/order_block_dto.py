@@ -1,0 +1,132 @@
+from dataclasses import dataclass
+from datetime import datetime
+from typing import List, Optional, Dict, Any
+from strategy.dto.indicator_result_dto import IndicatorResultDto
+
+
+@dataclass
+class OrderBlockDto:
+    """Order Block data transfer object for a single order block"""
+    type: str  # 'demand' or 'supply'
+    price_high: float
+    price_low: float
+    index: int
+    wick_ratio: float
+    body_ratio: float
+    candle: Dict[str, Any]
+    related_fvg: Optional[Dict[str, Any]] = None
+    is_doji: bool = False
+    timestamp: Optional[datetime] = None
+    doji_data: Optional[Dict[str, Any]] = None
+    bos_data: Optional[Dict[str, Any]] = None
+    
+    @property
+    def is_demand(self) -> bool:
+        """Check if this is a demand order block"""
+        return self.type == 'demand'
+    
+    @property
+    def is_supply(self) -> bool:
+        """Check if this is a supply order block"""
+        return self.type == 'supply'
+    
+    @property
+    def mid_price(self) -> float:
+        """Get the mid price of the order block"""
+        return (self.price_high + self.price_low) / 2
+    
+    @property
+    def size(self) -> float:
+        """Get the size (range) of the order block"""
+        return self.price_high - self.price_low
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for compatibility with existing code"""
+        return {k: v for k, v in vars(self).items() if v is not None}
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'OrderBlockDto':
+        """Create an OrderBlock DTO from a dictionary"""
+        return cls(
+            type=data.get('type', ''),
+            price_high=data.get('price_high', 0.0),
+            price_low=data.get('price_low', 0.0),
+            index=data.get('index', 0),
+            wick_ratio=data.get('wick_ratio', 0.0),
+            body_ratio=data.get('body_ratio', 0.0),
+            candle=data.get('candle', {}),
+            related_fvg=data.get('related_fvg', None),
+            is_doji=data.get('is_doji', False),
+            timestamp=data.get('timestamp'),
+            doji_data=data.get('doji_data')
+        )
+
+
+@dataclass
+class OrderBlockResultDto(IndicatorResultDto):
+    """Order Block indicator result data transfer object"""
+    demand_blocks: List[OrderBlockDto]
+    supply_blocks: List[OrderBlockDto]
+    
+    @property
+    def has_demand_block(self) -> bool:
+        """Check if result contains any demand order blocks"""
+        return len(self.demand_blocks) > 0
+    
+    @property
+    def has_supply_block(self) -> bool:
+        """Check if result contains any supply order blocks"""
+        return len(self.supply_blocks) > 0
+    
+    @property
+    def all_blocks(self) -> List[OrderBlockDto]:
+        """Get all order blocks (both demand and supply)"""
+        return self.demand_blocks + self.supply_blocks
+    
+    @property
+    def latest_block(self) -> Optional[OrderBlockDto]:
+        """Get the most recent order block if available"""
+        # Combine and sort all blocks by index (descending)
+        sorted_blocks = sorted(
+            self.all_blocks, 
+            key=lambda x: x.index, 
+            reverse=True
+        )
+        return sorted_blocks[0] if sorted_blocks else None
+    
+    @property
+    def latest_demand_block(self) -> Optional[OrderBlockDto]:
+        """Get the most recent demand block if available"""
+        return self.demand_blocks[0] if self.demand_blocks else None
+    
+    @property
+    def latest_supply_block(self) -> Optional[OrderBlockDto]:
+        """Get the most recent supply block if available"""
+        return self.supply_blocks[0] if self.supply_blocks else None
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'OrderBlockResultDto':
+        """Create an OrderBlock result DTO from a dictionary"""
+        # Handle old format with a single 'blocks' list and separate demand/supply lists
+        if 'blocks' in data:
+            all_blocks = [OrderBlockDto.from_dict(b) for b in data.get('blocks', [])]
+            demand_blocks = [b for b in all_blocks if b.is_demand]
+            supply_blocks = [b for b in all_blocks if b.is_supply]
+        else:
+            # Handle new format with separate demand and supply lists
+            demand_blocks = [OrderBlockDto.from_dict(b) for b in data.get('demand_blocks', [])]
+            supply_blocks = [OrderBlockDto.from_dict(b) for b in data.get('supply_blocks', [])]
+        
+        return cls(
+            timestamp=data.get('timestamp', datetime.now()),
+            indicator_name=data.get('indicator_name', 'OrderBlock'),
+            demand_blocks=demand_blocks,
+            supply_blocks=supply_blocks
+        )
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary including nested order blocks"""
+        result = super().to_dict()
+        result['demand_blocks'] = [b.to_dict() for b in self.demand_blocks]
+        result['supply_blocks'] = [b.to_dict() for b in self.supply_blocks]
+        return result

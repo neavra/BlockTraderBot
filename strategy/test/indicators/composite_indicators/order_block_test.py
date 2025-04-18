@@ -184,16 +184,16 @@ class TestOrderBlockIndicator(unittest.TestCase):
         async def run_test():
             # Test with empty candles
             result = await self.indicator.calculate({'candles': []})
-            self.assertEqual(len(result['blocks']), 0)
-            self.assertEqual(len(result['demand_blocks']), 0)
-            self.assertEqual(len(result['supply_blocks']), 0)
-            self.assertFalse(result['has_demand_block'])
-            self.assertFalse(result['has_supply_block'])
-            self.assertIsNone(result['latest_block'])
+            self.assertEqual(len(result.demand_blocks), 0)
+            self.assertEqual(len(result.supply_blocks), 0)
+            self.assertFalse(result.has_demand_block)
+            self.assertFalse(result.has_supply_block)
+            self.assertIsNone(result.latest_block)
             
             # Test with insufficient candles (less than 5)
             result = await self.indicator.calculate({'candles': self.candles[:4]})
-            self.assertEqual(len(result['blocks']), 0)
+            self.assertEqual(len(result.demand_blocks), 0)
+            self.assertEqual(len(result.supply_blocks), 0)
             
         asyncio.run(run_test())
     
@@ -207,9 +207,10 @@ class TestOrderBlockIndicator(unittest.TestCase):
                 'bos_data': self.bos_data
             }
             result = await self.indicator.calculate(data)
-            self.assertEqual(len(result['blocks']), 0)
-            self.assertFalse(result['has_demand_block'])
-            self.assertFalse(result['has_supply_block'])
+            self.assertEqual(len(result.demand_blocks), 0)
+            self.assertEqual(len(result.supply_blocks), 0)
+            self.assertFalse(result.has_demand_block)
+            self.assertFalse(result.has_supply_block)
             
             # Test with empty doji data
             data = {
@@ -219,7 +220,8 @@ class TestOrderBlockIndicator(unittest.TestCase):
                 'bos_data': self.bos_data
             }
             result = await self.indicator.calculate(data)
-            self.assertEqual(len(result['blocks']), 0)
+            self.assertEqual(len(result.demand_blocks), 0)
+            self.assertEqual(len(result.supply_blocks), 0)
             
         asyncio.run(run_test())
     
@@ -238,25 +240,25 @@ class TestOrderBlockIndicator(unittest.TestCase):
             result = await self.indicator.calculate(data)
             
             # We should detect both a demand and supply block
-            self.assertTrue(result['has_demand_block'])
-            self.assertTrue(result['has_supply_block'])
-            self.assertEqual(len(result['demand_blocks']), 1)
-            self.assertEqual(len(result['supply_blocks']), 1)
+            self.assertTrue(result.has_demand_block)
+            self.assertTrue(result.has_supply_block)
+            self.assertEqual(len(result.demand_blocks), 1)
+            self.assertEqual(len(result.supply_blocks), 1)
             
             # Verify demand block details
-            demand_block = result['demand_blocks'][0]
-            self.assertEqual(demand_block['type'], 'demand')
-            self.assertEqual(demand_block['index'], 0)  # Bearish doji at index 0
+            demand_block = result.demand_blocks[0]
+            self.assertEqual(demand_block.type, 'demand')
+            self.assertEqual(demand_block.index, 0)  # Bearish doji at index 0
             
             # Verify supply block details
-            supply_block = result['supply_blocks'][0]
-            self.assertEqual(supply_block['type'], 'supply')
-            self.assertEqual(supply_block['index'], 1)  # Bullish doji at index 1
+            supply_block = result.supply_blocks[0]
+            self.assertEqual(supply_block.type, 'supply')
+            self.assertEqual(supply_block.index, 1)  # Bullish doji at index 1
             
             # Verify that blocks contain complete data about components
-            self.assertIn('doji_data', demand_block)
-            self.assertIn('fvg_data', demand_block)
-            self.assertIn('bos_data', demand_block)
+            self.assertIsNotNone(demand_block.doji_data)
+            self.assertIsNotNone(demand_block.related_fvg)
+            self.assertIsNotNone(demand_block.bos_data)
             
         asyncio.run(run_test())
     
@@ -275,8 +277,8 @@ class TestOrderBlockIndicator(unittest.TestCase):
             result = await self.custom_indicator.calculate(data)
             
             # We should still detect both blocks even without BOS
-            self.assertTrue(result['has_demand_block'])
-            self.assertTrue(result['has_supply_block'])
+            self.assertTrue(result.has_demand_block)
+            self.assertTrue(result.has_supply_block)
             
         asyncio.run(run_test())
     
@@ -311,11 +313,11 @@ class TestOrderBlockIndicator(unittest.TestCase):
             result = await self.custom_indicator.calculate(data)
             
             # We should not detect a demand block because FVG is outside window
-            self.assertFalse(result['has_demand_block'])
-            self.assertEqual(len(result['demand_blocks']), 0)
+            self.assertFalse(result.has_demand_block)
+            self.assertEqual(len(result.demand_blocks), 0)
             
             # We should still detect a supply block
-            self.assertTrue(result['has_supply_block'])
+            self.assertTrue(result.has_supply_block)
             
         asyncio.run(run_test())
     

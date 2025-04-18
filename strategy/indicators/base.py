@@ -1,8 +1,11 @@
-# strategy/indicators/base.py
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, Union, List
+from typing import Dict, Any, Optional, Union, TypeVar, Generic
+from strategy.dto.indicator_result_dto import IndicatorResultDto
 
-class Indicator(ABC):
+# Generic type for result DTOs
+T = TypeVar('T', bound=IndicatorResultDto)
+
+class Indicator(ABC, Generic[T]):
     """Base class for all indicators"""
     
     def __init__(self, params: Dict[str, Any] = None):
@@ -11,7 +14,7 @@ class Indicator(ABC):
         self.name = self.__class__.__name__
         
     @abstractmethod
-    async def calculate(self, data: Dict[str, Any]) -> Union[bool, float, Dict[str, Any]]:
+    async def calculate(self, data: Dict[str, Any]) -> T:
         """
         Calculate the indicator value based on the provided data
         
@@ -19,7 +22,7 @@ class Indicator(ABC):
             data: Dictionary containing market data (OHLCV, etc.)
             
         Returns:
-            Indicator result: boolean, float, or dictionary with detailed results
+            Typed indicator result object
         """
         pass
     

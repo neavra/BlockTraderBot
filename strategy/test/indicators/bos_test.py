@@ -5,6 +5,7 @@ from typing import Dict, Any, List
 
 # Import the StructureBreakIndicator class
 from strategy.indicators.bos import StructureBreakIndicator
+from strategy.dto.bos_dto import StructureBreakDto, StructureBreakResultDto
 from shared.domain.dto.candle_dto import CandleDto
 
 class TestStructureBreakIndicator(unittest.TestCase):
@@ -162,20 +163,22 @@ class TestStructureBreakIndicator(unittest.TestCase):
                 'candles': [],
                 'market_context': self.market_context
             })
-            self.assertEqual(len(result['breaks']), 0)
-            self.assertFalse(result['has_bullish_break'])
-            self.assertFalse(result['has_bearish_break'])
-            self.assertIsNone(result['latest_break'])
+            self.assertEqual(len(result.bullish_breaks), 0)
+            self.assertEqual(len(result.bearish_breaks), 0)
+            self.assertFalse(result.has_bullish_break)
+            self.assertFalse(result.has_bearish_break)
+            self.assertIsNone(result.latest_break)
             
             # Test with insufficient candles (less than 3)
             result = await self.indicator.calculate({
                 'candles': self.hh_candle_dicts[:2],
                 'market_context': self.market_context
             })
-            self.assertEqual(len(result['breaks']), 0)
-            self.assertFalse(result['has_bullish_break'])
-            self.assertFalse(result['has_bearish_break'])
-            self.assertIsNone(result['latest_break'])
+            self.assertEqual(len(result.bullish_breaks), 0)
+            self.assertEqual(len(result.bearish_breaks), 0)
+            self.assertFalse(result.has_bullish_break)
+            self.assertFalse(result.has_bearish_break)
+            self.assertIsNone(result.latest_break)
             
         asyncio.run(run_test())
     
@@ -186,30 +189,33 @@ class TestStructureBreakIndicator(unittest.TestCase):
             result = await self.indicator.calculate({
                 'candles': self.hh_candle_dicts
             })
-            self.assertEqual(len(result['breaks']), 0)
-            self.assertFalse(result['has_bullish_break'])
-            self.assertFalse(result['has_bearish_break'])
-            self.assertIsNone(result['latest_break'])
+            self.assertEqual(len(result.bullish_breaks), 0)
+            self.assertEqual(len(result.bearish_breaks), 0)
+            self.assertFalse(result.has_bullish_break)
+            self.assertFalse(result.has_bearish_break)
+            self.assertIsNone(result.latest_break)
             
             # Test with empty market context
             result = await self.indicator.calculate({
                 'candles': self.hh_candle_dicts,
                 'market_context': {}
             })
-            self.assertEqual(len(result['breaks']), 0)
-            self.assertFalse(result['has_bullish_break'])
-            self.assertFalse(result['has_bearish_break'])
-            self.assertIsNone(result['latest_break'])
+            self.assertEqual(len(result.bullish_breaks), 0)
+            self.assertEqual(len(result.bearish_breaks), 0)
+            self.assertFalse(result.has_bullish_break)
+            self.assertFalse(result.has_bearish_break)
+            self.assertIsNone(result.latest_break)
             
             # Test with invalid swing points
             result = await self.indicator.calculate({
                 'candles': self.hh_candle_dicts,
                 'market_context': {'swing_high': {}, 'swing_low': {}}
             })
-            self.assertEqual(len(result['breaks']), 0)
-            self.assertFalse(result['has_bullish_break'])
-            self.assertFalse(result['has_bearish_break'])
-            self.assertIsNone(result['latest_break'])
+            self.assertEqual(len(result.bullish_breaks), 0)
+            self.assertEqual(len(result.bearish_breaks), 0)
+            self.assertFalse(result.has_bullish_break)
+            self.assertFalse(result.has_bearish_break)
+            self.assertIsNone(result.latest_break)
             
         asyncio.run(run_test())
     
@@ -223,26 +229,23 @@ class TestStructureBreakIndicator(unittest.TestCase):
             })
             
             # Verify a bullish break was detected
-            self.assertTrue(result['has_bullish_break'])
+            self.assertTrue(result.has_bullish_break)
             
-            # Find all higher high breaks in the results
-            higher_highs = [b for b in result['breaks'] if b['break_type'] == 'higher_high']
+            # Find all higher high breaks 
+            higher_highs = result.higher_highs
             
             # There should be at least one higher high
             self.assertGreaterEqual(len(higher_highs), 1)
             
             # Verify details of the most recent higher high
             latest_hh = higher_highs[0]
-            self.assertEqual(latest_hh['break_type'], 'higher_high')
-            self.assertGreater(latest_hh['break_value'], 0)  # Break value should be positive
-            self.assertGreater(latest_hh['break_percentage'], 0)  # Break percentage should be positive
-            self.assertEqual(latest_hh['swing_reference'], 105.0)  # Reference to swing high
-            
-            # Check that timestamp was preserved
-            self.assertIn('timestamp', latest_hh)
+            self.assertEqual(latest_hh.break_type, 'higher_high')
+            self.assertGreater(latest_hh.break_value, 0)  # Break value should be positive
+            self.assertGreater(latest_hh.break_percentage, 0)  # Break percentage should be positive
+            self.assertEqual(latest_hh.swing_reference, 105.0)  # Reference to swing high
             
             # Verify candle data is included
-            self.assertIn('candle', latest_hh)
+            self.assertIsNotNone(latest_hh.candle)
             
         asyncio.run(run_test())
     
@@ -256,26 +259,23 @@ class TestStructureBreakIndicator(unittest.TestCase):
             })
             
             # Verify a bearish break was detected
-            self.assertTrue(result['has_bearish_break'])
+            self.assertTrue(result.has_bearish_break)
             
-            # Find all lower low breaks in the results
-            lower_lows = [b for b in result['breaks'] if b['break_type'] == 'lower_low']
+            # Find all lower low breaks
+            lower_lows = result.lower_lows
             
             # There should be at least one lower low
             self.assertGreaterEqual(len(lower_lows), 1)
             
             # Verify details of the most recent lower low
             latest_ll = lower_lows[0]
-            self.assertEqual(latest_ll['break_type'], 'lower_low')
-            self.assertGreater(latest_ll['break_value'], 0)  # Break value should be positive
-            self.assertGreater(latest_ll['break_percentage'], 0)  # Break percentage should be positive
-            self.assertEqual(latest_ll['swing_reference'], 95.0)  # Reference to swing low
-            
-            # Check that timestamp was preserved
-            self.assertIn('timestamp', latest_ll)
+            self.assertEqual(latest_ll.break_type, 'lower_low')
+            self.assertGreater(latest_ll.break_value, 0)  # Break value should be positive
+            self.assertGreater(latest_ll.break_percentage, 0)  # Break percentage should be positive
+            self.assertEqual(latest_ll.swing_reference, 95.0)  # Reference to swing low
             
             # Verify candle data is included
-            self.assertIn('candle', latest_ll)
+            self.assertIsNotNone(latest_ll.candle)
             
         asyncio.run(run_test())
     
@@ -289,20 +289,20 @@ class TestStructureBreakIndicator(unittest.TestCase):
             })
             
             # Verify a bullish structural element was detected
-            self.assertTrue(result['has_bullish_break'])
+            self.assertTrue(result.has_bullish_break)
             
-            # Find all higher low breaks in the results
-            higher_lows = [b for b in result['breaks'] if b['break_type'] == 'higher_low']
+            # Find all higher low breaks
+            higher_lows = result.higher_lows
             
             # There should be at least one higher low
             self.assertGreaterEqual(len(higher_lows), 1)
             
             # Verify details of the most recent higher low
             latest_hl = higher_lows[0]
-            self.assertEqual(latest_hl['break_type'], 'higher_low')
-            self.assertGreater(latest_hl['break_value'], 0)  # Break value should be positive
-            self.assertGreater(latest_hl['break_percentage'], 0)  # Break percentage should be positive
-            self.assertEqual(latest_hl['swing_reference'], 95.0)  # Reference to swing low
+            self.assertEqual(latest_hl.break_type, 'higher_low')
+            self.assertGreater(latest_hl.break_value, 0)  # Break value should be positive
+            self.assertGreater(latest_hl.break_percentage, 0)  # Break percentage should be positive
+            self.assertEqual(latest_hl.swing_reference, 95.0)  # Reference to swing low
             
         asyncio.run(run_test())
     
@@ -316,20 +316,20 @@ class TestStructureBreakIndicator(unittest.TestCase):
             })
             
             # Verify a bearish structural element was detected
-            self.assertTrue(result['has_bearish_break'])
+            self.assertTrue(result.has_bearish_break)
             
-            # Find all lower high breaks in the results
-            lower_highs = [b for b in result['breaks'] if b['break_type'] == 'lower_high']
+            # Find all lower high breaks
+            lower_highs = result.lower_highs
             
             # There should be at least one lower high
             self.assertGreaterEqual(len(lower_highs), 1)
             
             # Verify details of the most recent lower high
             latest_lh = lower_highs[0]
-            self.assertEqual(latest_lh['break_type'], 'lower_high')
-            self.assertGreater(latest_lh['break_value'], 0)  # Break value should be positive
-            self.assertGreater(latest_lh['break_percentage'], 0)  # Break percentage should be positive
-            self.assertEqual(latest_lh['swing_reference'], 105.0)  # Reference to swing high
+            self.assertEqual(latest_lh.break_type, 'lower_high')
+            self.assertGreater(latest_lh.break_value, 0)  # Break value should be positive
+            self.assertGreater(latest_lh.break_percentage, 0)  # Break percentage should be positive
+            self.assertEqual(latest_lh.swing_reference, 105.0)  # Reference to swing high
             
         asyncio.run(run_test())
     
@@ -342,16 +342,11 @@ class TestStructureBreakIndicator(unittest.TestCase):
                 'market_context': self.market_context
             })
             
-            # There should be no bullish/bearish breaks if price remains within range
-            # Check if there are any higher_high or lower_low types
-            higher_highs = [b for b in result['breaks'] if b['break_type'] == 'higher_high']
-            lower_lows = [b for b in result['breaks'] if b['break_type'] == 'lower_low']
+            # There should be no higher highs or lower lows detected
+            self.assertEqual(len(result.higher_highs), 0)
+            self.assertEqual(len(result.lower_lows), 0)
             
-            self.assertEqual(len(higher_highs), 0)
-            self.assertEqual(len(lower_lows), 0)
-            
-            # There may be higher_low or lower_high detected even without true BOS
-            # So we specifically check for absence of actual breaks
+            # There may be higher lows or lower highs, so we don't test those specifically
             
         asyncio.run(run_test())
     
@@ -378,13 +373,10 @@ class TestStructureBreakIndicator(unittest.TestCase):
                 'market_context': self.market_context
             })
             
-            # Find higher high breaks in the result
-            default_hh = [b for b in default_result['breaks'] if b['break_type'] == 'higher_high']
-            
             # Default indicator (1 confirmation) should detect the break
-            self.assertGreaterEqual(len(default_hh), 1)
-            if len(default_hh) > 0:
-                self.assertEqual(default_hh[0]['candle']['high'], 106)  # The breakout candle's high
+            self.assertGreaterEqual(len(default_result.higher_highs), 1)
+            if len(default_result.higher_highs) > 0:
+                self.assertEqual(default_result.higher_highs[0].candle['high'], 106)  # The breakout candle's high
             
             # With custom indicator (2 confirmations needed)
             custom_result = await self.custom_indicator.calculate({
@@ -392,11 +384,8 @@ class TestStructureBreakIndicator(unittest.TestCase):
                 'market_context': self.market_context
             })
             
-            # Find higher high breaks
-            custom_hh = [b for b in custom_result['breaks'] if b['break_type'] == 'higher_high']
-            
             # Custom indicator should not detect (needs 2 confirmations)
-            self.assertEqual(len(custom_hh), 0)
+            self.assertEqual(len(custom_result.higher_highs), 0)
             
             # Now test with two confirmations available
             two_confirmations = breakout_candles
@@ -405,12 +394,10 @@ class TestStructureBreakIndicator(unittest.TestCase):
                 'market_context': self.market_context
             })
             
-            full_custom_hh = [b for b in full_custom_result['breaks'] if b['break_type'] == 'higher_high']
-            
             # Custom indicator should now detect with 2 confirmations
-            self.assertGreaterEqual(len(full_custom_hh), 1)
-            if len(full_custom_hh) > 0:
-                self.assertEqual(full_custom_hh[0]['candle']['high'], 106)  # The breakout candle's high
+            self.assertGreaterEqual(len(full_custom_result.higher_highs), 1)
+            if len(full_custom_result.higher_highs) > 0:
+                self.assertEqual(full_custom_result.higher_highs[0].candle['high'], 106)  # The breakout candle's high
             
         asyncio.run(run_test())
     
@@ -436,15 +423,11 @@ class TestStructureBreakIndicator(unittest.TestCase):
                 'market_context': self.market_context
             })
             
-            # Find higher high breaks in both results
-            default_hh = [b for b in default_result['breaks'] if b['break_type'] == 'higher_high']
-            custom_hh = [b for b in custom_result['breaks'] if b['break_type'] == 'higher_high']
-            
             # Default indicator should detect the break (0.05% threshold)
-            self.assertGreaterEqual(len(default_hh), 1)
+            self.assertGreaterEqual(len(default_result.higher_highs), 1)
             
             # Custom indicator should not detect (0.1% threshold)
-            self.assertEqual(len(custom_hh), 0)
+            self.assertEqual(len(custom_result.higher_highs), 0)
             
         asyncio.run(run_test())
     
@@ -460,14 +443,22 @@ class TestStructureBreakIndicator(unittest.TestCase):
                 'market_context': self.market_context
             })
             
-            # Check that breaks are sorted by index (descending)
-            if len(result['breaks']) >= 2:
-                for i in range(len(result['breaks']) - 1):
-                    self.assertGreaterEqual(result['breaks'][i]['index'], result['breaks'][i+1]['index'])
+            # Check that bullish breaks are sorted by index (descending)
+            if len(result.bullish_breaks) >= 2:
+                for i in range(len(result.bullish_breaks) - 1):
+                    self.assertGreaterEqual(result.bullish_breaks[i].index, result.bullish_breaks[i+1].index)
             
-            # Verify latest_break is the most recent one
-            if result['breaks']:
-                self.assertEqual(result['latest_break'], result['breaks'][0])
+            # Check that bearish breaks are sorted by index (descending)
+            if len(result.bearish_breaks) >= 2:
+                for i in range(len(result.bearish_breaks) - 1):
+                    self.assertGreaterEqual(result.bearish_breaks[i].index, result.bearish_breaks[i+1].index)
+                    
+            # Verify latest_break is the most recent one from either list
+            if result.bullish_breaks or result.bearish_breaks:
+                all_breaks = result.all_breaks
+                most_recent_break = max(all_breaks, key=lambda b: b.index) if all_breaks else None
+                if most_recent_break:
+                    self.assertEqual(result.latest_break, most_recent_break)
             
         asyncio.run(run_test())
     

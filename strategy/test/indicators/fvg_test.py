@@ -264,15 +264,13 @@ class TestFVGIndicator(unittest.TestCase):
         async def run_test():
             # Test with empty candles
             result = await self.indicator.calculate({'candles': []})
-            self.assertEqual(len(result['bullish_fvgs']), 0)
-            self.assertEqual(len(result['bearish_fvgs']), 0)
-            self.assertEqual(result['strength'], 0.0)
+            self.assertEqual(len(result.bullish_fvgs), 0)
+            self.assertEqual(len(result.bearish_fvgs), 0)
             
             # Test with insufficient candles (less than 3)
             result = await self.indicator.calculate({'candles': self.bullish_candle_dicts[:2]})
-            self.assertEqual(len(result['bullish_fvgs']), 0)
-            self.assertEqual(len(result['bearish_fvgs']), 0)
-            self.assertEqual(result['strength'], 0.0)
+            self.assertEqual(len(result.bullish_fvgs), 0)
+            self.assertEqual(len(result.bearish_fvgs), 0)
             
         asyncio.run(run_test())
     
@@ -283,22 +281,22 @@ class TestFVGIndicator(unittest.TestCase):
             result = await self.indicator.calculate({'candles': self.bullish_candle_dicts})
             
             # There should be 1 bullish FVG detected
-            self.assertEqual(len(result['bullish_fvgs']), 1)
-            self.assertEqual(len(result['bearish_fvgs']), 0)
+            self.assertEqual(len(result.bullish_fvgs), 1)
+            self.assertEqual(len(result.bearish_fvgs), 0)
             
             # Verify details of the bullish FVG
-            bullish_fvg = result['bullish_fvgs'][0]
-            self.assertEqual(bullish_fvg['type'], 'bullish')
-            self.assertEqual(bullish_fvg['bottom'], 102.0)  # Candle 0's high
-            self.assertEqual(bullish_fvg['top'], 109.0)     # Candle 2's low
-            self.assertGreaterEqual(bullish_fvg['size_percent'], 2.0)  # Should be about 2.45%
-            self.assertFalse(bullish_fvg['filled'])
+            bullish_fvg = result.bullish_fvgs[0]
+            self.assertEqual(bullish_fvg.type, 'bullish')
+            self.assertEqual(bullish_fvg.bottom, 102.0)  # Candle 0's high
+            self.assertEqual(bullish_fvg.top, 109.0)     # Candle 2's low
+            self.assertGreaterEqual(bullish_fvg.size_percent, 2.0)  # Should be about 2.45%
+            self.assertFalse(bullish_fvg.filled)
             
             # Check that timestamp was preserved
-            self.assertIn('timestamp', bullish_fvg)
+            self.assertIsNotNone(bullish_fvg.timestamp)
             
             # Verify candle data is included
-            self.assertIn('candle', bullish_fvg)
+            self.assertIsNotNone(bullish_fvg.candle)
             
         asyncio.run(run_test())
     
@@ -309,22 +307,23 @@ class TestFVGIndicator(unittest.TestCase):
             result = await self.indicator.calculate({'candles': self.bearish_candle_dicts})
             
             # There should be 1 bearish FVG detected
-            self.assertEqual(len(result['bullish_fvgs']), 0)
-            self.assertEqual(len(result['bearish_fvgs']), 1)
+            self.assertEqual(len(result.bullish_fvgs), 0)
+            self.assertEqual(len(result.bearish_fvgs), 1)
             
             # Verify details of the bearish FVG
-            bearish_fvg = result['bearish_fvgs'][0]
-            self.assertEqual(bearish_fvg['type'], 'bearish')
-            self.assertEqual(bearish_fvg['top'], 95.0)      # Candle 0's low
-            self.assertEqual(bearish_fvg['bottom'], 80.0)   # Candle 2's high
-            self.assertGreaterEqual(bearish_fvg['size_percent'], 2.0)  # Should be about 2.04%
-            self.assertFalse(bearish_fvg['filled'])
+            bearish_fvg = result.bearish_fvgs[0]
+            self.assertEqual(bearish_fvg.type, 'bearish')
+            self.assertEqual(bearish_fvg.top, 95.0)      # Candle 0's low
+            self.assertEqual(bearish_fvg.bottom, 80.0)   # Candle 2's high
+            self.assertGreaterEqual(bearish_fvg.size_percent, 2.0)  # Should be about 2.04%
+            self.assertFalse(bearish_fvg.filled)
             
             # Check that timestamp was preserved
-            self.assertIn('timestamp', bearish_fvg)
+            self.assertIsNotNone(bearish_fvg.timestamp)
             
             # Verify candle data is included
-            self.assertIn('candle', bearish_fvg)
+            self.assertIsNotNone(bearish_fvg.candle)
+
             
         asyncio.run(run_test())
     
@@ -335,11 +334,11 @@ class TestFVGIndicator(unittest.TestCase):
             result = await self.indicator.calculate({'candles': self.filled_fvg_candle_dicts})
             
             # There should be 1 bullish FVG detected
-            self.assertEqual(len(result['bullish_fvgs']), 1)
+            self.assertEqual(len(result.bullish_fvgs), 1)
             
             # Verify the FVG is marked as filled
-            bullish_fvg = result['bullish_fvgs'][0]
-            self.assertTrue(bullish_fvg['filled'])
+            bullish_fvg = result.bullish_fvgs[0]
+            self.assertTrue(bullish_fvg.filled)
             
         asyncio.run(run_test())
     
@@ -350,18 +349,18 @@ class TestFVGIndicator(unittest.TestCase):
             result = await self.indicator.calculate({'candles': self.small_gap_candle_dicts})
             
             # No FVGs should be detected with default parameters
-            self.assertEqual(len(result['bullish_fvgs']), 0)
-            self.assertEqual(len(result['bearish_fvgs']), 0)
+            self.assertEqual(len(result.bullish_fvgs), 0)
+            self.assertEqual(len(result.bearish_fvgs), 0)
             
             # With custom parameters (lower threshold), the gap should be detected
             result = await self.custom_indicator.calculate({'candles': self.small_gap_candle_dicts})
             
             # The custom indicator may detect the gap depending on exact values
             # Only assert something if FVGs are detected
-            if len(result['bullish_fvgs']) > 0:
-                bullish_fvg = result['bullish_fvgs'][0]
-                self.assertEqual(bullish_fvg['bottom'], 100.2)  # Candle 0's high
-                self.assertEqual(bullish_fvg['top'], 100.3)    # Candle 2's low
+            if len(result.bullish_fvgs) > 0:
+                bullish_fvg = result.bullish_fvgs[0]
+                self.assertEqual(bullish_fvg.bottom, 100.2)  # Candle 0's high
+                self.assertEqual(bullish_fvg.top, 100.3)    # Candle 2's low
             
         asyncio.run(run_test())
     

@@ -123,15 +123,16 @@ class TestDojiCandleIndicator(unittest.TestCase):
         async def run_test():
             # Test with empty candles
             result = await self.indicator.calculate({'candles': []})
-            self.assertEqual(len(result['dojis']), 0)
-            self.assertFalse(result['has_doji'])
-            self.assertIsNone(result['latest_doji'])
+            self.assertEqual(len(result.dojis), 0)
+            self.assertFalse(result.has_doji)
+            self.assertIsNone(result.latest_doji)
+
             
             # Test with insufficient candles (less than 3)
             result = await self.indicator.calculate({'candles': self.candle_dicts[:2]})
-            self.assertEqual(len(result['dojis']), 0)
-            self.assertFalse(result['has_doji'])
-            self.assertIsNone(result['latest_doji'])
+            self.assertEqual(len(result.dojis), 0)
+            self.assertFalse(result.has_doji)
+            self.assertIsNone(result.latest_doji)
             
         asyncio.run(run_test())
     
@@ -142,26 +143,26 @@ class TestDojiCandleIndicator(unittest.TestCase):
             result = await self.indicator.calculate({'candles': self.candle_dicts})
             
             # There should be 2 dojis with default parameters (the first and last candles)
-            self.assertEqual(len(result['dojis']), 2)
-            self.assertTrue(result['has_doji'])
+            self.assertEqual(len(result.dojis), 2)
+            self.assertTrue(result.has_doji)
             
             # Check that the latest doji is the most recent one (candles are processed in reverse)
-            self.assertIsNotNone(result['latest_doji'])
-            self.assertEqual(result['latest_doji']['index'], 4)  # Index of last candle
+            self.assertIsNotNone(result.latest_doji)
+            self.assertEqual(result.latest_doji.index, 4)  # Index of last candle
             
             # Verify details of detected dojis
-            for doji in result['dojis']:
+            for doji in result.dojis:
                 # Ensure body_to_range_ratio is within limits
-                self.assertLessEqual(doji['body_to_range_ratio'], self.indicator.params['max_body_to_range_ratio'])
+                self.assertLessEqual(doji.body_to_range_ratio, self.indicator.params['max_body_to_range_ratio'])
                 
                 # Check that timestamp was preserved
-                self.assertIn('timestamp', doji)
+                self.assertIsNotNone(doji.timestamp)
                 
                 # Verify candle data is included
-                self.assertIn('candle', doji)
+                self.assertIsNotNone(doji.candle)
                 
                 # Verify strength calculation (higher for smaller bodies)
-                self.assertAlmostEqual(doji['strength'], 1.0 - doji['body_to_range_ratio'])
+                self.assertAlmostEqual(doji.strength, 1.0 - doji.body_to_range_ratio)
             
         asyncio.run(run_test())
     
@@ -172,17 +173,17 @@ class TestDojiCandleIndicator(unittest.TestCase):
             result = await self.custom_indicator.calculate({'candles': self.candle_dicts})
             
             # With more permissive parameters, we should detect more dojis
-            self.assertTrue(len(result['dojis']) >= 2)
-            self.assertTrue(result['has_doji'])
+            self.assertTrue(len(result.dojis) >= 2)
+            self.assertTrue(result.has_doji)
             
             # Check specific candles that should be detected
             first_candle_detected = False
             second_candle_detected = False
             
-            for doji in result['dojis']:
-                if doji['index'] == 0:  # Perfect doji
+            for doji in result.dojis:
+                if doji.index == 0:  # Perfect doji
                     first_candle_detected = True
-                elif doji['index'] == 1:  # Near doji that should be detected with custom params
+                elif doji.index == 1:  # Near doji that should be detected with custom params
                     second_candle_detected = True
             
             self.assertTrue(first_candle_detected)
@@ -216,7 +217,7 @@ class TestDojiCandleIndicator(unittest.TestCase):
             result = await self.indicator.calculate({'candles': test_candles})
             
             # Zero range candle should be skipped (not causing errors)
-            self.assertEqual(len(result['dojis']), 2)
+            self.assertEqual(len(result.dojis), 2)
             
         asyncio.run(run_test())
     
@@ -247,9 +248,9 @@ class TestDojiCandleIndicator(unittest.TestCase):
             result = await self.indicator.calculate({'candles': reversed_candles})
             
             # Check that dojis are sorted by index (descending)
-            if len(result['dojis']) >= 2:
-                for i in range(len(result['dojis']) - 1):
-                    self.assertGreaterEqual(result['dojis'][i]['index'], result['dojis'][i+1]['index'])
+            if len(result.dojis) >= 2:
+                for i in range(len(result.dojis) - 1):
+                    self.assertGreaterEqual(result.dojis[i].index, result.dojis[i+1].index)
             
         asyncio.run(run_test())
 
