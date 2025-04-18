@@ -19,6 +19,10 @@ class OrderBlockDto:
     timestamp: Optional[datetime] = None
     doji_data: Optional[Dict[str, Any]] = None
     bos_data: Optional[Dict[str, Any]] = None
+    status: str
+    touched: bool = False
+    mitigation_percentage: float
+    created_at:datetime
     
     @property
     def is_demand(self) -> bool:
