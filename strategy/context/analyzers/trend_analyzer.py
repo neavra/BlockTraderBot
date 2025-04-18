@@ -1,20 +1,14 @@
 import logging
 from typing import List, Dict, Any
-from enum import Enum
+from .base import BaseAnalyzer
+from ..types import TrendDirection
 
 logger = logging.getLogger(__name__)
 
-class TrendDirection(Enum):
-    UP = "uptrend"
-    DOWN = "downtrend"
-    NEUTRAL = "neutral"
-    UNKNOWN = "unknown"
-
-
-class SimpleTrendAnalyzer:
+class TrendAnalyzer(BaseAnalyzer):
     """
     A trend analyzer that determines market trend direction
-    based solely on the pattern of swing highs and lows.
+    based on the pattern of swing highs and lows.
     """
     
     def __init__(self, lookback: int = 2):
@@ -25,6 +19,18 @@ class SimpleTrendAnalyzer:
             lookback: Number of swing points to consider for trend determination
         """
         self.lookback = lookback
+    
+    def analyze(self, candles: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        This method is not directly used for trend analysis since it requires
+        swing points from the market context rather than raw candles.
+        
+        Returns:
+            Empty dictionary as trend analysis is done in update_market_context
+        """
+        # Trend analysis requires swing points which are in the market context
+        # So this method doesn't do much on its own
+        return {}
     
     def analyze_trend(self, swing_highs: List[Dict[str, Any]], swing_lows: List[Dict[str, Any]]) -> TrendDirection:
         """
@@ -69,42 +75,30 @@ class SimpleTrendAnalyzer:
         else:
             return TrendDirection.NEUTRAL
     
-    def update_market_context(self, market_context: Dict[str, Any]) -> Dict[str, Any]:
+    def update_market_context(self, context, candles: List[Dict[str, Any]]):
         """
         Update market context with trend information
         
         Args:
-            market_context: The current market context containing at least:
-                           - swing_high_history: List of swing high points
-                           - swing_low_history: List of swing low points
+            context: MarketContext object to update
+            candles: List of candle data (not used directly)
             
         Returns:
-            Updated market context with trend information
+            Updated MarketContext
         """
         # Extract swing histories from context
-        swing_high_history = market_context.get('swing_high_history', [])
-        swing_low_history = market_context.get('swing_low_history', [])
+        swing_high_history = context.swing_high_history
+        swing_low_history = context.swing_low_history
         
         # Analyze trend
         trend = self.analyze_trend(swing_high_history, swing_low_history)
         
         # Update market context with trend information
-        prev_trend = market_context.get('trend', TrendDirection.UNKNOWN.value)
-        market_context['trend'] = trend.value
+        prev_trend = context.trend
+        context.set_trend(trend.value)
         
         # Log if trend changed
         if prev_trend != trend.value:
             logger.info(f"Trend changed from {prev_trend} to {trend.value}")
         
-        return market_context
-
-
-# Example usage:
-def example_trend_analysis(market_context):
-    # Initialize analyzer
-    analyzer = SimpleTrendAnalyzer(lookback=2)
-    
-    # Update market context with trend analysis
-    updated_context = analyzer.update_market_context(market_context)
-    
-    return updated_context
+        return context

@@ -1,11 +1,12 @@
 import logging
 from typing import List, Dict, Any, Optional
+from .base import BaseAnalyzer
 
 logger = logging.getLogger(__name__)
 
-class SimpleSwingDetector:
+class SwingDetector(BaseAnalyzer):
     """
-    A simplified swing detector that identifies swing highs and lows in price data
+    A swing detector that identifies swing highs and lows in price data
     and updates market context when new swings are detected.
     """
     
@@ -20,7 +21,7 @@ class SimpleSwingDetector:
         self.lookback = lookback
         self.min_strength_pct = min_strength / 100.0  # Convert to decimal
     
-    def detect_swings(self, candles: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def analyze(self, candles: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         Detect the most recent swing high and low points in the candle data
         
@@ -86,48 +87,28 @@ class SimpleSwingDetector:
             "swing_low": latest_swing_low
         }
     
-    def update_market_context(self, market_context: Dict[str, Any], candles: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def update_market_context(self, context, candles: List[Dict[str, Any]]):
         """
-        Update market context with newly detected swing points if they've changed
+        Update market context with newly detected swing points
         
         Args:
-            market_context: Existing market context object that might contain swing points
+            context: MarketContext object to update
             candles: List of candle dictionaries with OHLCV data
             
         Returns:
-            Updated market context with new swing information
+            Updated MarketContext
         """
         # Detect latest swings
-        swings = self.detect_swings(candles)
+        swings = self.analyze(candles)
         
-        # Get existing swing data from context or initialize empty
-        existing_swing_high = market_context.get('swing_high')
-        existing_swing_low = market_context.get('swing_low')
-        
-        # New swing high detected
+        # Update swing high if detected
         if swings['swing_high'] is not None:
-            # Check if this is a new swing high (different from the existing one)
-            if existing_swing_high is None or \
-               swings['swing_high']['index'] != existing_swing_high.get('index'):
-                
-                market_context['swing_high'] = swings['swing_high']
-                logger.info(f"New swing high detected at price {swings['swing_high']['price']}")
-                
-                # Add to swing high history if it exists in the context
-                if 'swing_high_history' in market_context:
-                    market_context['swing_high_history'].append(swings['swing_high'])
+            context.set_swing_high(swings['swing_high'])
+            logger.info(f"New swing high detected at price {swings['swing_high']['price']}")
         
-        # New swing low detected
+        # Update swing low if detected
         if swings['swing_low'] is not None:
-            # Check if this is a new swing low
-            if existing_swing_low is None or \
-               swings['swing_low']['index'] != existing_swing_low.get('index'):
-                
-                market_context['swing_low'] = swings['swing_low']
-                logger.info(f"New swing low detected at price {swings['swing_low']['price']}")
-                
-                # Add to swing low history if it exists in the context
-                if 'swing_low_history' in market_context:
-                    market_context['swing_low_history'].append(swings['swing_low'])
+            context.set_swing_low(swings['swing_low'])
+            logger.info(f"New swing low detected at price {swings['swing_low']['price']}")
         
-        return market_context
+        return context

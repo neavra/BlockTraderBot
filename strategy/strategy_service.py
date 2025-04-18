@@ -62,7 +62,7 @@ class StrategyService:
         # Store the event loop for callbacks
         self.main_loop = asyncio.get_running_loop()
         
-        # Initialize indicators
+        # Initialize market context
         await self._init_market_context()
 
         # Initialize indicators
@@ -101,9 +101,21 @@ class StrategyService:
         logger.info("Initializing market context...")
         
         try:
+            # Get market context configuration
             market_context_params = self.config.get('strategy', {}).get('market_context', {})
-            self.market_structure = MarketStructure(params=market_context_params)
-            logger.info("Market structure initialized")
+
+            # Initialize market structure with cache service
+            self.market_structure = MarketStructure(
+                params=market_context_params,
+                cache_service=self.cache_service
+            )
+
+            # Initialize analyzers if specified in config
+            if 'analyzers' in market_context_params:
+                # Analyzers are created automatically in the MarketStructure constructor
+                logger.info(f"Initialized market structure with {len(self.market_structure.analyzers)} analyzers")
+            else:
+                logger.info("Market structure initialized without analyzers")
         except Exception as e:
             logger.error(f"Failed to initialize market structure: {e}")
             raise

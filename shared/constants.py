@@ -59,7 +59,7 @@ class CacheKeys:
     ACTIVE_ORDERS = "orders:{exchange}:{symbol}:active"
     
     # Market state
-    MARKET_STATE = "market:{exchange}:{symbol}:state"
+    MARKET_STATE = "market:{exchange}:{symbol}:{timeframe}:state"
 
 # Time-to-live (TTL) constants (in seconds)
 class CacheTTL:
