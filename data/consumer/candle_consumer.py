@@ -21,7 +21,7 @@ class CandleConsumer(BaseConsumer[CandleDto]):
     Stores candles in the database using the candle repository.
     """
     
-    def __init__(self, database: Database, consumer_candle_queue: QueueService):
+    def __init__(self, database: Database):
         """
         Initialize the candle consumer.
         
@@ -30,7 +30,7 @@ class CandleConsumer(BaseConsumer[CandleDto]):
         """
         super().__init__()
         self.database = database
-        self.consumer_candle_queue = consumer_candle_queue
+        self.consumer_candle_queue = QueueService()
         self.repository = None
         self.main_loop = None
         self.event_tasks = set()
@@ -66,7 +66,7 @@ class CandleConsumer(BaseConsumer[CandleDto]):
     def on_candle(self, candle):
         """Synchronous callback that schedules async work"""
         # Log receipt of the event synchronously
-        self.logger.info(f"Received event: {candle}")
+        # self.logger.info(f"Received event: {candle}")
         
         try:
             # Use run_coroutine_threadsafe to schedule the async task from this thread
@@ -96,15 +96,15 @@ class CandleConsumer(BaseConsumer[CandleDto]):
         if not candle:
             self.logger.warning("Received empty candle data")
             return
-        self.logger.info(f"Received candle: {candle}")
+        # self.logger.info(f"Received candle: {candle}")
         
         try:
             candleDto = CandleDto(**candle)
         
-            self.logger.info(
-                f"Processing candle: {candleDto.exchange}/{candleDto.symbol}/{candleDto.timeframe} "
-                f"at {candleDto.timestamp} - O:{candleDto.open} H:{candleDto.high} L:{candleDto.low} C:{candleDto.close}"
-            )
+            # self.logger.info(
+            #     f"Processing candle: {candleDto.exchange}/{candleDto.symbol}/{candleDto.timeframe} "
+            #     f"at {candleDto.timestamp} - O:{candleDto.open} H:{candleDto.high} L:{candleDto.low} C:{candleDto.close}"
+            # )
             # Check if the candle already exists:
             existing_candle = self.repository.find_by_exchange_symbol_timeframe(
                 exchange=candleDto.exchange,
@@ -112,10 +112,10 @@ class CandleConsumer(BaseConsumer[CandleDto]):
                 timeframe=candleDto.timeframe,
                 timestamp=candleDto.timestamp
             )
-            self.logger.debug("Existing Candle:" + str(existing_candle))
+            # self.logger.debug("Existing Candle:" + str(existing_candle))
             if len(existing_candle) > 0:
                 # Update the existing candle
-                self.logger.debug(f"Updating existing candle: {candleDto.timestamp}")
+                # self.logger.debug(f"Updating existing candle: {candleDto.timestamp}")
                 candleDto.id = existing_candle[0].id
                 self.repository.update(
                     id=existing_candle[0].id,
@@ -123,10 +123,10 @@ class CandleConsumer(BaseConsumer[CandleDto]):
                 )
             else:
                 # Create a new candle
-                self.logger.debug(f"Creating new candle: {candleDto.timestamp}")
+                # self.logger.debug(f"Creating new candle: {candleDto.timestamp}")
                 self.repository.create(candleDto)
             
-            self.logger.debug(f"Successfully processed candle: {candleDto.timestamp}")
+            # self.logger.debug(f"Successfully processed candle: {candleDto.timestamp}")
         
         except asyncio.CancelledError:
             # Handle cancellation gracefully
@@ -134,7 +134,7 @@ class CandleConsumer(BaseConsumer[CandleDto]):
             raise  # Re-raise to properly propagate cancellation
 
         except Exception as e:
-            self.logger.error(f"Error processing candle: {e}")
+            self.logger.error(f"CandleConsumer process_item, Error processing candle: {e}")
         
     async def stop(self):
         """

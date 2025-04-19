@@ -96,7 +96,7 @@ class BinanceRestClient(RestClient):
             if endTime is not None and not isinstance(endTime, int):
                 raise ValueError(f"Invalid endTime: {endTime} (should be an integer)")
                 
-            self.logger.debug(f"Fetching candlestick data from: {url}")
+            # self.logger.debug(f"Fetching candlestick data from: {url}")
             
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, ssl=self.ssl_context) as response:
