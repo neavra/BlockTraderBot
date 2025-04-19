@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 import json
 from typing import Dict, Any, List
 
-from utils.helper import DateTimeEncoder
+from data.utils.helper import DateTimeEncoder
 
 from ..base import Normalizer
 from shared.domain.dto.candle_dto import CandleDto

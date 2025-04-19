@@ -9,10 +9,9 @@ import uuid
 
 from shared.constants import Exchanges, Queues, RoutingKeys
 from shared.domain.dto.candle_dto import CandleDto
-from database.repository.candle_repository import CandleRepository
-from database.db import Database
+from data.database.repository.candle_repository import CandleRepository
+from data.database.db import Database
 from shared.queue.queue_service import QueueService
-from utils.error_handling import retry #, handle_exceptions
 from .base import BaseConsumer
 
 class CandleConsumer(BaseConsumer[CandleDto]):

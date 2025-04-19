@@ -6,19 +6,19 @@ from dataclasses import asdict
 from datetime import datetime
 
 from data.utils.helper import DateTimeEncoder
-from normalizer.base import Normalizer
+from data.normalizer.base import Normalizer
 from shared.cache.cache_service import CacheService
-from database.db import Database
-from consumer.candle_consumer import CandleConsumer
+from data.database.db import Database
+from data.consumer.candle_consumer import CandleConsumer
 from shared.constants import Exchanges, Queues, RoutingKeys, CacheKeys, CacheTTL
 from shared.queue.queue_service import QueueService
 
 from .base import BaseManager
 from shared.domain.dto.candle_dto import CandleDto
-from normalizer.factory import NormalizerFactory
+from data.normalizer.factory import NormalizerFactory
 from shared.domain.events.candle_closed_event import CandleClosedEvent
 
-from aggregators.candle_aggregator import CandleAggregator
+from data.aggregators.candle_aggregator import CandleAggregator
 from .state_manager import StateManager
 from data.utils.timeframe_utils import get_custom_timeframes_for_base, is_timeframe_enabled
 

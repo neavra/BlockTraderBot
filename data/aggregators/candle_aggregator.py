@@ -10,8 +10,8 @@ from typing import Dict, Any, Optional, List, Tuple
 from shared.domain.dto.candle_dto import CandleDto
 from shared.queue.queue_service import QueueService
 from shared.constants import Exchanges, RoutingKeys
-from managers.state_manager import StateManager
-from utils.timeframe_utils import calculate_candle_boundaries, timeframe_to_ms
+from data.managers.state_manager import StateManager
+from data.utils.timeframe_utils import calculate_candle_boundaries, timeframe_to_ms
 
 class CandleAggregator:
     """
