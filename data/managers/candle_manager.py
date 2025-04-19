@@ -308,14 +308,14 @@ class CandleManager(BaseManager):
             )
 
             cache_key = CacheKeys.CANDLE_HISTORY_REST_API_DATA.format(
-                exchange=self.config.get('exchange', 'default'),
+                exchange=normalized_candle.exchange,
                 symbol=normalized_candle.symbol,
                 timeframe=normalized_candle.timeframe
             )
         # No matter what need to cache both live and historical.But only publish live events once historical data is caught up
         elif source == 'live':
             cache_key = CacheKeys.CANDLE_LIVE_WEBSOCKET_DATA.format(
-                    exchange=self.config.get('exchange', 'default'),
+                    exchange=normalized_candle.exchange,
                     symbol=normalized_candle.symbol,
                     timeframe=normalized_candle.timeframe
                 )
