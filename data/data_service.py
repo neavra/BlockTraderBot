@@ -13,6 +13,7 @@ from database.db import Database
 from managers.candle_manager import CandleManager
 from shared.queue.queue_service import QueueService
 from utils.concurrency import gather_with_concurrency
+from data.connectors.websocket.base import WebSocketClient
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +41,6 @@ class DataService:
             config: Configuration dictionary
         """
         self.database = Database(db_url=config["data"]["database"]["database_url"])
-        self.consumer_candle_queue = QueueService()
-        self.candle_consumer = CandleConsumer(database=self.database, consumer_candle_queue=self.consumer_candle_queue)
         self.candle_manager = CandleManager(candle_consumer=self.candle_consumer, config=config)
         self.config = config
         
@@ -50,8 +49,8 @@ class DataService:
         self.rest_factory = RestClientFactory()
         
         # Initialize client lists
-        self.websocket_clients = []
-        self.rest_clients = []
+        self.websocket_clients: List[WebSocketClient] = []
+        self.rest_clients: List[RestClient] = []
         
         # Task tracking
         self.tasks = []
