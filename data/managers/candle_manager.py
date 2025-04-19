@@ -10,7 +10,7 @@ from normalizer.base import Normalizer
 from shared.cache.cache_service import CacheService
 from database.db import Database
 from consumer.candle_consumer import CandleConsumer
-from shared.constants import Exchanges, Queues, RoutingKeys, CacheKeys
+from shared.constants import Exchanges, Queues, RoutingKeys, CacheKeys, CacheTTL
 from shared.queue.queue_service import QueueService
 
 from .base import BaseManager
@@ -269,7 +269,8 @@ class CandleManager(BaseManager):
         self.candle_cache.add_to_sorted_set(
             name=cache_key,
             value=normalized_candle_json,
-            score=score
+            score=score,
+            ex=CacheTTL.CANDLE_DATA
         )
         self.logger.debug("Successfully stored closed candle to cache")
 

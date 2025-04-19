@@ -293,7 +293,7 @@ class CacheService:
             logger.error(f"Error publishing to channel {channel}: {str(e)}")
             return 0
     
-    def add_to_sorted_set(self, name: str, value: str, score: float) -> bool:
+    def add_to_sorted_set(self, name: str, value: str, score: float, ex: Optional[int] = None) -> bool:
         """
         Add a value to a sorted set with the specified score.
         
@@ -301,6 +301,7 @@ class CacheService:
             name: Sorted set name
             value: Member value
             score: Score for sorting
+            ex: Optional TTL in seconds
             
         Returns:
             True if successful, False otherwise

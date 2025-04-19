@@ -70,7 +70,7 @@ class CacheTTL:
     MONTH = 30 * DAY
     
     # Specific TTLs
-    CANDLE_DATA = 7 * DAY
+    CANDLE_DATA = 1 * HOUR
     MARKET_STATE = 1 * DAY
     ORDER_DATA = 30 * DAY
     SIGNAL_DATA = 7 * DAY
