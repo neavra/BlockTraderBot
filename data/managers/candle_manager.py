@@ -189,6 +189,10 @@ class CandleManager(BaseManager):
             data: Raw WebSocket data
             is_closed: Flag indicating if the candle is closed
         """
+        # Only process closed candles
+        if not is_closed:
+            return
+        
         exchange = data.get('exchange', '').lower()
         
         try:
@@ -201,10 +205,9 @@ class CandleManager(BaseManager):
             self.logger.info(f"Normalized Candle: {normalized_candle}")
             
             # Process standard timeframe candle
-            if is_closed:
-                market_key = f"{normalized_candle.exchange}:{normalized_candle.symbol}:{normalized_candle.timeframe}"
-                historical_done = self.historical_complete.get(market_key, False)
-                await self._process_standard_candle(normalized_candle, normalizer, "live", historical_done)
+            market_key = f"{normalized_candle.exchange}:{normalized_candle.symbol}:{normalized_candle.timeframe}"
+            historical_done = self.historical_complete.get(market_key, False)
+            await self._process_standard_candle(normalized_candle, normalizer, "live", historical_done)
             
             # Process custom timeframes if enabled
             # if self.custom_timeframes_enabled:
@@ -291,12 +294,19 @@ class CandleManager(BaseManager):
         # self.logger.info(f"Closed candle: {candle.exchange}, Symbol: {candle.symbol}, Timeframe: {candle.timeframe}")
         
         # self.logger.debug("Successfully published candle to candle producer queue")
-        if source == 'historical':
-            self.producer_candle_queue.publish(
+        self.producer_candle_queue.publish(
                 exchange=Exchanges.MARKET_DATA, 
                 routing_key=RoutingKeys.CANDLE_ALL, 
                 message=normalized_candle_json
             )
+        if source == 'historical':
+            candle_event = CandleClosedEvent.to_event(normalized_candle, source)
+            self.producer_event_queue.publish(
+                exchange=Exchanges.MARKET_DATA, 
+                routing_key=RoutingKeys.DATA_EVENT_HANDLE, 
+                message=json.dumps(asdict(candle_event), cls=DateTimeEncoder)
+            )
+
             cache_key = CacheKeys.CANDLE_HISTORY_REST_API_DATA.format(
                 exchange=self.config.get('exchange', 'default'),
                 symbol=normalized_candle.symbol,
@@ -310,7 +320,7 @@ class CandleManager(BaseManager):
                     timeframe=normalized_candle.timeframe
                 )
             if historical_done:
-                candle_event = CandleClosedEvent.to_event(normalized_candle, "live")
+                candle_event = CandleClosedEvent.to_event(normalized_candle, source)
                 self.producer_event_queue.publish(
                     exchange=Exchanges.MARKET_DATA, 
                     routing_key=RoutingKeys.DATA_EVENT_HANDLE, 
