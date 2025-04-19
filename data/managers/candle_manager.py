@@ -383,6 +383,43 @@ class CandleManager(BaseManager):
         self.logger.info(f"Historical data marked complete for {exchange}:{symbol}:{timeframe}")
         
 
+    def get_configured_markets(self) -> list:
+        """
+        Get all configured markets (exchange, symbol, timeframe combinations)
+        from the config.
+        
+        Returns:
+            List of tuples (exchange, symbol, timeframe)
+        """
+        markets = []
+        
+        for exchange_name, exchange_config in self.config.get('data', {}).items():
+            # Skip if the exchange is not a dictionary or is empty
+            if not isinstance(exchange_config, dict):
+                continue
+            
+            # Check for symbols
+            symbols = exchange_config.get('symbols', {})
+            if not symbols:
+                continue
+                
+            for symbol, is_active in symbols.items():
+                if not is_active:
+                    continue
+                    
+                # Check for timeframes
+                timeframes = exchange_config.get('timeframes', {})
+                if not timeframes:
+                    continue
+                    
+                for timeframe, tf_is_active in timeframes.items():
+                    if not tf_is_active:
+                        continue
+                        
+                    markets.append((exchange_name, symbol, timeframe))
+        
+        return markets
+
     def is_any_historical_loading(self) -> bool:
         """Check if any symbol/timeframe is still loading historical data"""
         # If any configured market isn't in the historical_complete dict or is False
