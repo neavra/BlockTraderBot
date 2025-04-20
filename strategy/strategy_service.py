@@ -184,6 +184,7 @@ class StrategyService:
                 strategies=self.strategies,
                 cache_service=self.cache_service,
                 producer_queue=self.producer_queue,
+                consumer_queue=self.consumer_queue,
                 config=self.config.get('strategy', {})
             )
             
@@ -202,18 +203,16 @@ class StrategyService:
         try:
             # Set up exchange and queue
             self.consumer_queue.declare_exchange(Exchanges.MARKET_DATA)
-            self.consumer_queue.declare_queue(Queues.CANDLES)
-            
-            # Bind to candle events - we want to receive all new candle events
+            self.consumer_queue.declare_queue(Queues.EVENTS)
             self.consumer_queue.bind_queue(
-                Exchanges.MARKET_DATA,
-                Queues.CANDLES,
-                RoutingKeys.CANDLE_ALL
+                exchange=Exchanges.MARKET_DATA,
+                queue=Queues.EVENTS,
+                routing_key=RoutingKeys.DATA_EVENT_HANDLE
             )
             
             # Subscribe to the queue
             self.consumer_queue.subscribe(
-                Queues.CANDLES,
+                Queues.EVENTS,
                 self._on_candle_event
             )
             

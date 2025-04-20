@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Dict, List, Any, Optional, Union, float
+from typing import Dict, List, Any, Optional, Union
 
 from strategy.indicators.base import Indicator
-from shared.domain.dto.signal_dto import Signal
+from shared.domain.dto.signal_dto import SignalDto
 
 class Strategy(ABC):
     """
@@ -23,7 +23,7 @@ class Strategy(ABC):
         self.params = params or {}
         
     @abstractmethod
-    async def analyze(self, data: Dict[str, Any]) -> Optional[Signal]:
+    async def analyze(self, data: Dict[str, Any]) -> Optional[SignalDto]:
         """
         Analyze market data and generate signals if conditions are met
         
