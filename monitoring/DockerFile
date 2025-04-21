@@ -1,0 +1,26 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements files
+COPY monitoring/requirements.txt /app/requirements.txt
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy source code
+COPY shared/ /app/shared/
+COPY monitoring/ /app/monitoring/
+COPY config/ /app/config/
+
+# Set Python path
+ENV PYTHONPATH=/app
+
+# Run monitoring service
+CMD ["python", "-m", "monitoring.main"]

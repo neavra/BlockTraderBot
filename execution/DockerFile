@@ -1,0 +1,26 @@
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements files
+COPY execution/requirements.txt /app/requirements.txt
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy source code
+COPY shared/ /app/shared/
+COPY execution/ /app/execution/
+COPY config/ /app/config/
+
+# Set Python path
+ENV PYTHONPATH=/app
+
+# Run execution service
+CMD ["python", "-m", "execution.main"]
