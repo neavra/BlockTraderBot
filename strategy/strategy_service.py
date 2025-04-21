@@ -39,6 +39,7 @@ class StrategyService:
             cache_service: Cache service for retrieving market data
             config: Configuration dictionary
         """
+        # TODO Refactor the definition of queues properly
         self.consumer_queue = consumer_queue
         self.producer_queue = producer_queue
         self.cache_service = cache_service
@@ -71,11 +72,11 @@ class StrategyService:
         # Initialize strategies
         await self._init_strategies()
         
+        # Initialize data event consumer
+        # await self._init_data_consumer()
+        
         # Initialize the strategy runner
         await self._init_strategy_runner()
-        
-        # Initialize data event consumer
-        await self._init_data_consumer()
         
         self.running = True
         logger.info("Strategy service started successfully")
@@ -87,8 +88,8 @@ class StrategyService:
         if self.strategy_runner:
             await self.strategy_runner.stop()
         
-        if self.consumer_queue:
-            self.consumer_queue.stop()
+        # if self.consumer_queue:
+        #     self.consumer_queue.stop()
         
         if self.producer_queue:
             self.producer_queue.stop()
@@ -196,30 +197,30 @@ class StrategyService:
             logger.error(f"Failed to initialize strategy runner: {e}")
             raise
     
-    async def _init_data_consumer(self):
-        """Initialize the data event consumer."""
-        logger.info("Initializing data event consumer...")
+    # async def _init_data_consumer(self):
+    #     """Initialize the data event consumer."""
+    #     logger.info("Initializing data event consumer...")
         
-        try:
-            # Set up exchange and queue
-            self.consumer_queue.declare_exchange(Exchanges.MARKET_DATA)
-            self.consumer_queue.declare_queue(Queues.EVENTS)
-            self.consumer_queue.bind_queue(
-                exchange=Exchanges.MARKET_DATA,
-                queue=Queues.EVENTS,
-                routing_key=RoutingKeys.DATA_EVENT_HANDLE
-            )
+    #     try:
+    #         # Set up exchange and queue
+    #         self.consumer_queue.declare_exchange(Exchanges.MARKET_DATA)
+    #         self.consumer_queue.declare_queue(Queues.EVENTS)
+    #         self.consumer_queue.bind_queue(
+    #             exchange=Exchanges.MARKET_DATA,
+    #             queue=Queues.EVENTS,
+    #             routing_key=RoutingKeys.DATA_EVENT_HANDLE
+    #         )
             
-            # Subscribe to the queue
-            self.consumer_queue.subscribe(
-                Queues.EVENTS,
-                self._on_candle_event
-            )
+    #         # Subscribe to the queue
+    #         self.consumer_queue.subscribe(
+    #             Queues.EVENTS,
+    #             self._on_candle_event
+    #         )
             
-            logger.info("Data event consumer initialized")
-        except Exception as e:
-            logger.error(f"Failed to initialize data event consumer: {e}")
-            raise
+    #         logger.info("Data event consumer initialized")
+    #     except Exception as e:
+    #         logger.error(f"Failed to initialize data event consumer: {e}")
+    #         raise
     
     def _on_candle_event(self, event: Dict[str, Any]):
         """
