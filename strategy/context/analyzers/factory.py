@@ -32,7 +32,7 @@ class AnalyzerFactory:
             Initialized analyzer instance or None if type is invalid
         """
         # Get config for this analyzer type
-        analyzer_config = self.config.get(analyzer_type, {})
+        analyzer_config = self.config
         
         # Merge with kwargs (kwargs take precedence)
         params = {**analyzer_config, **kwargs}

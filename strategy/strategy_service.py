@@ -110,13 +110,15 @@ class StrategyService:
             # Initialize market structure with cache service
             self.context_engine = ContextEngine(
                 cache_service=self.cache_service,
-                database_service=Database(),
-                config=self.config
+                database_service=Database(db_url=self.config["data"]["database"]["database_url"]),
+                config=market_context_params
             )
+
+            await self.context_engine.start()
 
             # Initialize analyzers if specified in config
             if 'analyzers' in market_context_params:
-                logger.info(f"Initialized market structure with {len(self.context_engine.analyzers)} analyzers")
+                logger.info(f"Initialized context with {len(self.context_engine.analyzers)} analyzers")
             else:
                 logger.info("Market structure initialized without analyzers")
         except Exception as e:

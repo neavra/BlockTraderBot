@@ -87,6 +87,9 @@
         "range": {
           "min_touches": 3,
           "min_range_size": 0.5
+        },
+        "fibbonacci": {
+          
         }
       }
     }

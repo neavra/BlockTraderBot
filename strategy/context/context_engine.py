@@ -68,12 +68,16 @@ class ContextEngine:
     async def _init_analyzers(self):
         """Initialize analyzers based on configuration."""
         logger.info("Initializing market analyzers...")
-        
-        analyzer_factory = AnalyzerFactory(self.config.get('analyzers', {}))
+        analyzer_config = self.config.get('analyzers', {})
+        analyzer_factory = AnalyzerFactory(analyzer_config)
         
         # Create default analyzers
-        self.analyzers = analyzer_factory.create_default_analyzers()
-        
+        # self.analyzers = analyzer_factory.create_default_analyzers()
+        analyzers = {}
+        logger.info(analyzer_config)
+        for analyzer_name in analyzer_config.keys():
+            analyzers[analyzer_name] = analyzer_factory.create_analyzer(analyzer_name)
+        self.analyzers = analyzers
         # Store references to commonly used analyzers
         self.swing_detector = self.analyzers.get('swing')
         self.trend_analyzer = self.analyzers.get('trend')
