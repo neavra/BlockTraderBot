@@ -21,8 +21,6 @@ class MarketContext:
     # Swing points
     swing_high: Optional[Dict[str, Any]] = None
     swing_low: Optional[Dict[str, Any]] = None
-    swing_high_history: List[Dict[str, Any]] = field(default_factory=list)
-    swing_low_history: List[Dict[str, Any]] = field(default_factory=list)
     
     # Trend information
     trend: str = field(default_factory=lambda: TrendDirectionEnum.UNKNOWN.value)
@@ -62,31 +60,13 @@ class MarketContext:
     # Swing point methods
     def set_swing_high(self, swing_high: Dict[str, Any]):
         """Set new swing high and update history"""
-        if self.swing_high is None or swing_high['index'] != self.swing_high.get('index'):
-            self.swing_high = swing_high
-            self.swing_high_history.insert(0, swing_high)  # Add to front of list
-            # Limit history size if needed
-            if len(self.swing_high_history) > 10:  # Example limit
-                self.swing_high_history = self.swing_high_history[:10]
+        self.swing_high = swing_high
         return self
 
     def set_swing_low(self, swing_low: Dict[str, Any]):
         """Set new swing low and update history"""
-        if self.swing_low is None or swing_low['index'] != self.swing_low.get('index'):
-            self.swing_low = swing_low
-            self.swing_low_history.insert(0, swing_low)  # Add to front of list
-            # Limit history size if needed
-            if len(self.swing_low_history) > 10:  # Example limit
-                self.swing_low_history = self.swing_low_history[:10]
+        self.swing_low = swing_low
         return self
-
-    def get_latest_swing_high(self) -> Optional[Dict[str, Any]]:
-        """Get most recent swing high"""
-        return self.swing_high_history[0] if self.swing_high_history else None
-
-    def get_latest_swing_low(self) -> Optional[Dict[str, Any]]:
-        """Get most recent swing low"""
-        return self.swing_low_history[0] if self.swing_low_history else None
 
     # Trend methods
     def set_trend(self, trend: str):
