@@ -1,6 +1,6 @@
 from typing import Dict, Any, Optional, List
 from datetime import datetime
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 import logging
 from strategy.domain.types.time_frame_enum import TimeframeCategoryEnum
 from strategy.domain.types.trend_direction_enum import TrendDirectionEnum
