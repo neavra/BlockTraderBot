@@ -12,7 +12,8 @@ from strategy.strategies.base import Strategy
 from strategy.engine.strategy_runner import StrategyRunner
 from strategy.strategies.strategy_factory import StrategyFactory
 from strategy.indicators.indicator_factory import IndicatorFactory
-from strategy.context.market_structure import MarketStructure
+from strategy.context.context_engine import ContextEngine
+from data.database.db import Database
 
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ class StrategyService:
         # Components to be initialized in start()
         self.indicators = {}
         self.strategies = []
+        self.context_engine = None
         self.strategy_runner = None
         self.main_loop = None
     
@@ -106,15 +108,15 @@ class StrategyService:
             market_context_params = self.config.get('strategy', {}).get('market_context', {})
 
             # Initialize market structure with cache service
-            self.market_structure = MarketStructure(
-                params=market_context_params,
-                cache_service=self.cache_service
+            self.context_engine = ContextEngine(
+                cache_service=self.cache_service,
+                database_service=Database(),
+                config=self.config
             )
 
             # Initialize analyzers if specified in config
             if 'analyzers' in market_context_params:
-                # Analyzers are created automatically in the MarketStructure constructor
-                logger.info(f"Initialized market structure with {len(self.market_structure.analyzers)} analyzers")
+                logger.info(f"Initialized market structure with {len(self.context_engine.analyzers)} analyzers")
             else:
                 logger.info("Market structure initialized without analyzers")
         except Exception as e:

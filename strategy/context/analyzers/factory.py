@@ -1,6 +1,9 @@
 import logging
 from typing import Dict, Any, Optional, List
-from .base import BaseAnalyzer
+from strategy.context.analyzers.base import BaseAnalyzer
+from strategy.context.analyzers.swing_detector import SwingDetector
+from strategy.context.analyzers.trend_analyzer import TrendAnalyzer
+from strategy.context.analyzers.range_detector import RangeDetector
 
 logger = logging.getLogger(__name__)
 
@@ -37,13 +40,10 @@ class AnalyzerFactory:
         try:
             # Import the appropriate analyzer class
             if analyzer_type == "swing":
-                from .swing_detector import SwingDetector
                 return SwingDetector(**params)
             elif analyzer_type == "trend":
-                from .trend_analyzer import TrendAnalyzer
                 return TrendAnalyzer(**params)
             elif analyzer_type == "range":
-                from .range_detector import RangeDetector
                 return RangeDetector(**params)
             else:
                 logger.warning(f"Unknown analyzer type: {analyzer_type}")
@@ -62,7 +62,7 @@ class AnalyzerFactory:
         analyzers = {}
         
         # Create standard analyzers
-        for analyzer_type in ["swing", "trend", "range"]:
+        for analyzer_type in ["swing", "trend", "range", "fibbonacci"]:
             analyzer = self.create_analyzer(analyzer_type)
             if analyzer:
                 analyzers[analyzer_type] = analyzer
