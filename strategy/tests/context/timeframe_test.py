@@ -1,26 +1,26 @@
 import unittest
-from strategy.context.types import TimeframeCategory, get_timeframe_category
+from strategy.domain.types.trend_direction_enum import TimeframeCategoryEnum, get_timeframe_category
 
-class TimeframeCategoryTest(unittest.TestCase):
-    """Test cases for TimeframeCategory"""
+class TimeframeCategoryEnumTest(unittest.TestCase):
+    """Test cases for TimeframeCategoryEnum"""
     
     def test_get_timeframe_category(self):
         """Test that timeframe categories are correctly assigned"""
         # Test high timeframes
-        self.assertEqual(get_timeframe_category('1d'), TimeframeCategory.HTF)
-        self.assertEqual(get_timeframe_category('4h'), TimeframeCategory.HTF)
-        self.assertEqual(get_timeframe_category('1h'), TimeframeCategory.HTF)
+        self.assertEqual(get_timeframe_category('1d'), TimeframeCategoryEnum.HTF)
+        self.assertEqual(get_timeframe_category('4h'), TimeframeCategoryEnum.HTF)
+        self.assertEqual(get_timeframe_category('1h'), TimeframeCategoryEnum.HTF)
         
         # Test medium timeframes
-        self.assertEqual(get_timeframe_category('30m'), TimeframeCategory.MTF)
-        self.assertEqual(get_timeframe_category('15m'), TimeframeCategory.MTF)
+        self.assertEqual(get_timeframe_category('30m'), TimeframeCategoryEnum.MTF)
+        self.assertEqual(get_timeframe_category('15m'), TimeframeCategoryEnum.MTF)
         
         # Test low timeframes
-        self.assertEqual(get_timeframe_category('5m'), TimeframeCategory.LTF)
-        self.assertEqual(get_timeframe_category('1m'), TimeframeCategory.LTF)
+        self.assertEqual(get_timeframe_category('5m'), TimeframeCategoryEnum.LTF)
+        self.assertEqual(get_timeframe_category('1m'), TimeframeCategoryEnum.LTF)
         
         # Test default
-        self.assertEqual(get_timeframe_category('unknown'), TimeframeCategory.MTF)
+        self.assertEqual(get_timeframe_category('unknown'), TimeframeCategoryEnum.MTF)
         
         # Print all timeframe categories for debugging
         print("Timeframe categories:")

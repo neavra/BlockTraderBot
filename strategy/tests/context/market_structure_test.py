@@ -3,12 +3,12 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Dict, Any, List
 
-from strategy.context.market_context import MarketContext
+from strategy.domain.models.market_context import MarketContext
 from strategy.context.market_structure import MarketStructure
 from strategy.context.analyzers.swing_detector import SwingDetector
 from strategy.context.analyzers.trend_analyzer import TrendAnalyzer
 from strategy.context.analyzers.range_detector import RangeDetector
-from strategy.context.types import TrendDirection, TimeframeCategory
+from strategy.domain.types.trend_direction_enum import TrendDirectionEnum, TimeframeCategoryEnum
 
 class MockCacheService:
     """Mock cache service for testing"""
@@ -222,13 +222,13 @@ class MarketStructureTest(unittest.TestCase):
 
         # Check that contexts were created with correct categories
         for ctx in htf_contexts:
-            self.assertEqual(ctx.timeframe_category, TimeframeCategory.HTF)
+            self.assertEqual(ctx.timeframe_category, TimeframeCategoryEnum.HTF)
 
         for ctx in mtf_contexts:
-            self.assertEqual(ctx.timeframe_category, TimeframeCategory.MTF)
+            self.assertEqual(ctx.timeframe_category, TimeframeCategoryEnum.MTF)
 
         for ctx in ltf_contexts:
-            self.assertEqual(ctx.timeframe_category, TimeframeCategory.LTF)
+            self.assertEqual(ctx.timeframe_category, TimeframeCategoryEnum.LTF)
 
         # Check that we have the right number of contexts in each category
         self.assertEqual(len(htf_contexts), 3)  # 1h, 4h, 1d
@@ -236,9 +236,9 @@ class MarketStructureTest(unittest.TestCase):
         self.assertEqual(len(ltf_contexts), 1)  # 5m
 
         # Now test the get_contexts_by_category method
-        retrieved_htf = self.market_structure.get_contexts_by_category('BTCUSDT', TimeframeCategory.HTF, 'binance')
-        retrieved_mtf = self.market_structure.get_contexts_by_category('BTCUSDT', TimeframeCategory.MTF, 'binance')
-        retrieved_ltf = self.market_structure.get_contexts_by_category('BTCUSDT', TimeframeCategory.LTF, 'binance')
+        retrieved_htf = self.market_structure.get_contexts_by_category('BTCUSDT', TimeframeCategoryEnum.HTF, 'binance')
+        retrieved_mtf = self.market_structure.get_contexts_by_category('BTCUSDT', TimeframeCategoryEnum.MTF, 'binance')
+        retrieved_ltf = self.market_structure.get_contexts_by_category('BTCUSDT', TimeframeCategoryEnum.LTF, 'binance')
 
         # Check that the right number of contexts were retrieved
         self.assertEqual(len(retrieved_htf), 3)  # 1h, 4h, 1d
@@ -249,13 +249,13 @@ class MarketStructureTest(unittest.TestCase):
         """Test checking if trends are aligned across timeframes"""
         # Create contexts with different trends
         context1 = MarketContext('BTCUSDT', '1h', 'binance')
-        context1.set_trend(TrendDirection.UP.value)
+        context1.set_trend(TrendDirectionEnum.UP.value)
 
         context2 = MarketContext('BTCUSDT', '4h', 'binance')
-        context2.set_trend(TrendDirection.UP.value)
+        context2.set_trend(TrendDirectionEnum.UP.value)
 
         context3 = MarketContext('BTCUSDT', '1d', 'binance')
-        context3.set_trend(TrendDirection.DOWN.value)
+        context3.set_trend(TrendDirectionEnum.DOWN.value)
 
         # Add contexts to market structure
         self.market_structure.contexts['binance_BTCUSDT_1h'] = context1

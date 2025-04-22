@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timezone
-from strategy.context.market_context import MarketContext
-from strategy.context.types import TrendDirection
+from strategy.domain.models.market_context import MarketContext
+from strategy.domain.types.trend_direction_enum import TrendDirectionEnum
 
 class MarketContextTest(unittest.TestCase):
     """Test cases for MarketContext class"""
@@ -35,7 +35,7 @@ class MarketContextTest(unittest.TestCase):
         self.assertEqual(self.context.symbol, 'BTCUSDT')
         self.assertEqual(self.context.timeframe, '1h')
         self.assertEqual(self.context.exchange, 'binance')
-        self.assertEqual(self.context.trend, TrendDirection.UNKNOWN.value)
+        self.assertEqual(self.context.trend, TrendDirectionEnum.UNKNOWN.value)
         self.assertIsNone(self.context.current_price)
         self.assertIsNone(self.context.swing_high)
         self.assertIsNone(self.context.swing_low)
@@ -83,11 +83,11 @@ class MarketContextTest(unittest.TestCase):
     
     def test_set_trend(self):
         """Test setting trend"""
-        self.context.set_trend(TrendDirection.UP.value)
-        self.assertEqual(self.context.trend, TrendDirection.UP.value)
+        self.context.set_trend(TrendDirectionEnum.UP.value)
+        self.assertEqual(self.context.trend, TrendDirectionEnum.UP.value)
         
-        self.context.set_trend(TrendDirection.DOWN.value)
-        self.assertEqual(self.context.trend, TrendDirection.DOWN.value)
+        self.context.set_trend(TrendDirectionEnum.DOWN.value)
+        self.assertEqual(self.context.trend, TrendDirectionEnum.DOWN.value)
     
     def test_set_range(self):
         """Test setting range"""
@@ -147,7 +147,7 @@ class MarketContextTest(unittest.TestCase):
         self.context.set_current_price(49000.0)
         self.context.set_swing_high(self.swing_high)
         self.context.set_swing_low(self.swing_low)
-        self.context.set_trend(TrendDirection.UP.value)
+        self.context.set_trend(TrendDirectionEnum.UP.value)
         self.context.set_range(50000.0, 48000.0, 49000.0)
         
         # Convert to dictionary
@@ -160,7 +160,7 @@ class MarketContextTest(unittest.TestCase):
         self.assertEqual(data['current_price'], 49000.0)
         self.assertEqual(data['swing_high'], self.swing_high)
         self.assertEqual(data['swing_low'], self.swing_low)
-        self.assertEqual(data['trend'], TrendDirection.UP.value)
+        self.assertEqual(data['trend'], TrendDirectionEnum.UP.value)
         self.assertEqual(data['range_high'], 50000.0)
         self.assertEqual(data['range_low'], 48000.0)
         self.assertEqual(data['range_equilibrium'], 49000.0)
@@ -178,7 +178,7 @@ class MarketContextTest(unittest.TestCase):
             'swing_low': self.swing_low,
             'swing_high_history': [self.swing_high],
             'swing_low_history': [self.swing_low],
-            'trend': TrendDirection.DOWN.value,
+            'trend': TrendDirectionEnum.DOWN.value,
             'range_high': 3200.0,
             'range_low': 2800.0,
             'range_equilibrium': 3000.0,
@@ -199,7 +199,7 @@ class MarketContextTest(unittest.TestCase):
         self.assertEqual(context.current_price, 3000.0)
         self.assertEqual(context.swing_high, self.swing_high)
         self.assertEqual(context.swing_low, self.swing_low)
-        self.assertEqual(context.trend, TrendDirection.DOWN.value)
+        self.assertEqual(context.trend, TrendDirectionEnum.DOWN.value)
         self.assertEqual(context.range_high, 3200.0)
         self.assertEqual(context.range_low, 2800.0)
         self.assertEqual(context.range_equilibrium, 3000.0)

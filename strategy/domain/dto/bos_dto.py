@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from strategy.dto.indicator_result_dto import IndicatorResultDto
+from strategy.domain.dto.indicator_result_dto import IndicatorResultDto
 from shared.domain.dto.candle_dto import CandleDto
 
 

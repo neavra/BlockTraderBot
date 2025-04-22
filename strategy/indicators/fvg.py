@@ -1,7 +1,7 @@
 from typing import Dict, Any, List
 from datetime import datetime, timezone
 from .base import Indicator
-from strategy.dto.fvg_dto import FvgDto, FvgResultDto
+from strategy.domain.dto.fvg_dto import FvgDto, FvgResultDto
 from shared.domain.dto.candle_dto import CandleDto
 import logging
 

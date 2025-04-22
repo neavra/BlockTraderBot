@@ -5,6 +5,7 @@ from strategy.strategies.base import Strategy
 
 # Import all strategy implementations
 from strategy.strategies.hidden_ob_strategy import HiddenOrderBlockStrategy
+from strategy.strategies.order_block_strategy import OrderBlockStrategy
 
 class StrategyFactory:
     """Factory for creating strategy instances by name."""
@@ -13,6 +14,7 @@ class StrategyFactory:
         """Initialize the factory with strategy mappings."""
         self._strategies = {
             'hidden_order_block': HiddenOrderBlockStrategy,
+            'order_block': OrderBlockStrategy
         }
     
     def create_strategy(self, name: str, indicators: Dict[str, Indicator] = None, 

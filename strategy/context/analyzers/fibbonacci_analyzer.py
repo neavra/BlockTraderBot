@@ -1,16 +1,18 @@
 import logging
 from typing import List, Dict, Any
+from strategy.context.analyzers.base import BaseAnalyzer
+from strategy.domain.models.market_context import MarketContext
 
 logger = logging.getLogger(__name__)
 
-class SimpleFibonacciLevels:
+class FibonacciAnalyzer(BaseAnalyzer):
     """
-    A simplified detector for Fibonacci retracement and extension levels
+    Analyzer that detects Fibonacci retracement and extension levels
     """
     
     def __init__(self, buffer_percent: float = 0.5):
         """
-        Initialize the Fibonacci level detector
+        Initialize the Fibonacci level analyzer
         
         Args:
             buffer_percent: Buffer around levels (%) to avoid levels too close to price
@@ -23,7 +25,73 @@ class SimpleFibonacciLevels:
         
         # Buffer percentage (convert to decimal)
         self.buffer = buffer_percent / 100.0
+    
+    def analyze(self, candles: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Analyze candle data to calculate Fibonacci levels
         
+        Args:
+            candles: List of candle data
+            
+        Returns:
+            Dictionary with Fibonacci level analysis results
+        """
+        if not candles:
+            logger.warning("No candles provided for Fibonacci analysis")
+            return {'support': [], 'resistance': []}
+            
+        # Calculate high and low from candles
+        high_price = max(c.get('high', c.get('close', 0)) for c in candles)
+        low_price = min(c.get('low', c.get('close', 0)) for c in candles)
+        current_price = candles[-1].get('close', 0)
+        
+        # Calculate Fibonacci levels
+        return self.calculate_levels(high_price, low_price, current_price)
+    
+    def update_market_context(self, context: MarketContext, candles: List[Dict[str, Any]]):
+        """
+        Update market context with Fibonacci levels
+        
+        Args:
+            context: MarketContext object to update
+            candles: List of candle data
+            
+        Returns:
+            Updated MarketContext
+        """
+        # Get current price from context or candles
+        current_price = context.current_price
+        
+        if current_price is None and candles:
+            current_price = candles[-1].get('close', 0)
+        
+        if current_price is None:
+            logger.error("Current price not available, cannot calculate Fibonacci levels")
+            return context
+        
+        # Try to get swing high/low points from context
+        swing_high = context.swing_high
+        swing_low = context.swing_low
+        
+        # Determine high and low prices for Fibonacci calculation
+        if swing_high and swing_low and isinstance(swing_high, dict) and isinstance(swing_low, dict):
+            high_price = swing_high.get('price')
+            low_price = swing_low.get('price')
+        else:
+            # Calculate from candles if swing points not available
+            high_price = max(c.get('high', c.get('close', 0)) for c in candles)
+            low_price = min(c.get('low', c.get('close', 0)) for c in candles)
+            
+        # Calculate Fibonacci levels
+        fib_levels = self.calculate_levels(high_price, low_price, current_price)
+        
+        # Update market context
+        context.fib_levels = fib_levels
+        
+        logger.debug(f"Updated market context with {len(fib_levels['support'])} support and {len(fib_levels['resistance'])} resistance levels")
+        
+        return context
+    
     def calculate_levels(self, high_price: float, low_price: float, current_price: float) -> Dict[str, List[Dict[str, Any]]]:
         """
         Calculate Fibonacci retracement and extension levels
@@ -132,54 +200,3 @@ class SimpleFibonacciLevels:
             'support': support_levels,
             'resistance': resistance_levels
         }
-    
-    def update_market_context(self, market_context: Dict[str, Any], 
-                             candles: List[Dict[str, Any]] = None,
-                             high_price: float = None, 
-                             low_price: float = None) -> Dict[str, Any]:
-        """
-        Update market context with Fibonacci levels
-        
-        Args:
-            market_context: The current market context
-            candles: Optional list of candles to calculate high/low from (if high_price/low_price not provided)
-            high_price: The highest price in the analyzed range (optional if candles provided)
-            low_price: The lowest price in the analyzed range (optional if candles provided)
-            
-        Returns:
-            Updated market context with Fibonacci levels
-        """
-        # Get current price from context or candles
-        current_price = market_context.get('current_price')
-        
-        if current_price is None and candles:
-            current_price = candles[-1].get('close', 0)
-        
-        if current_price is None:
-            logger.error("Current price not available, cannot calculate Fibonacci levels")
-            return market_context
-        
-        # Get high and low prices if not provided
-        if high_price is None or low_price is None:
-            # Try to get from swing high/low in context
-            swing_high = market_context.get('swing_high')
-            swing_low = market_context.get('swing_low')
-            
-            if swing_high and swing_low:
-                high_price = swing_high.get('price')
-                low_price = swing_low.get('price')
-            elif candles:
-                # Calculate from candles
-                high_price = max(c.get('high', c.get('close', 0)) for c in candles)
-                low_price = min(c.get('low', c.get('close', 0)) for c in candles)
-            else:
-                logger.error("No high/low prices or candles provided, cannot calculate Fibonacci levels")
-                return market_context
-        
-        # Calculate Fibonacci levels
-        fib_levels = self.calculate_levels(high_price, low_price, current_price)
-        
-        # Update market context
-        market_context['fib_levels'] = fib_levels
-        
-        return market_context

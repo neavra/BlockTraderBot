@@ -2,7 +2,7 @@ from typing import Dict, Any, List
 from datetime import datetime, timezone
 from strategy.indicators.base import Indicator
 from shared.domain.dto.candle_dto import CandleDto
-from strategy.dto.doji_dto import DojiDto, DojiResultDto
+from strategy.domain.dto.doji_dto import DojiDto, DojiResultDto
 import logging
 
 logger = logging.getLogger(__name__)

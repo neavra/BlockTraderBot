@@ -1,8 +1,9 @@
 from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
 import logging
-from .types import TrendDirection, TimeframeCategory
-from .market_context import MarketContext
+from strategy.domain.types.time_frame_enum import TimeframeCategoryEnum
+from strategy.domain.types.trend_direction_enum import TrendDirectionEnum
+from ..domain.models.market_context import MarketContext
 from shared.constants import CacheKeys, CacheTTL
 
 logger = logging.getLogger(__name__)
@@ -60,12 +61,12 @@ class MarketStructure:
         key = f"{exchange}_{symbol}_{timeframe}"
         return self.contexts.get(key)
 
-    def get_contexts_by_category(self, symbol: str, category: Union[TimeframeCategory, str], exchange: str = None) -> List[MarketContext]:
+    def get_contexts_by_category(self, symbol: str, category: Union[TimeframeCategoryEnum, str], exchange: str = None) -> List[MarketContext]:
         """Get all contexts for a timeframe category
 
         Args:
             symbol: Trading symbol (e.g., 'BTCUSDT')
-            category: Timeframe category (TimeframeCategory enum or string value)
+            category: Timeframe category (TimeframeCategoryEnum enum or string value)
             exchange: Exchange identifier (e.g., 'binance')
 
         Returns:
@@ -78,7 +79,7 @@ class MarketStructure:
         if isinstance(category, str):
             # Try to find the enum by value
             category_enum = None
-            for tf_category in TimeframeCategory:
+            for tf_category in TimeframeCategoryEnum:
                 if tf_category.value == category:
                     category_enum = tf_category
                     break
@@ -86,7 +87,7 @@ class MarketStructure:
             # If not found, try to find by name
             if category_enum is None:
                 try:
-                    category_enum = TimeframeCategory[category.upper()]
+                    category_enum = TimeframeCategoryEnum[category.upper()]
                 except KeyError:
                     logger.warning(f"Unknown timeframe category: {category}")
                     return []
@@ -119,7 +120,7 @@ class MarketStructure:
                 trends.add(ctx.trend)
 
         # Aligned if all trends are the same and not unknown
-        return len(trends) == 1 and TrendDirection.UNKNOWN.value not in trends
+        return len(trends) == 1 and TrendDirectionEnum.UNKNOWN.value not in trends
 
     def update_context(self, symbol: str, timeframe: str, candles: List[Dict[str, Any]],
                       exchange: str = None) -> Optional[MarketContext]:
@@ -254,7 +255,7 @@ class MarketStructure:
         order_blocks = []
 
         # Look for demand order blocks (support)
-        if swing_low and context.trend == TrendDirection.UP.value:
+        if swing_low and context.trend == TrendDirectionEnum.UP.value:
             # Find candle that created the swing low
             swing_index = swing_low.index
             if 0 <= swing_index < len(candles):
@@ -271,7 +272,7 @@ class MarketStructure:
                 })
 
         # Look for supply order blocks (resistance)
-        if swing_high and context.trend == TrendDirection.DOWN.value:
+        if swing_high and context.trend == TrendDirectionEnum.DOWN.value:
             # Find candle that created the swing high
             swing_index = swing_high.index
             if 0 <= swing_index < len(candles):

@@ -1,7 +1,7 @@
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 from .base import Indicator
-from strategy.dto.bos_dto import StructureBreakDto, StructureBreakResultDto
+from strategy.domain.dto.bos_dto import StructureBreakDto, StructureBreakResultDto
 from shared.domain.dto.candle_dto import CandleDto
 import logging
 

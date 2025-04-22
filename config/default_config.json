@@ -18,7 +18,79 @@
     "telegram":{
       
     }
-  },  
+  },
+  "strategy": {
+    "indicators": {
+      "order_block": {
+        "params": {
+          "max_body_to_range_ratio": 0.4,
+          "min_wick_to_body_ratio": 1.5,
+          "max_detection_window": 5,
+          "require_doji": true,
+          "require_bos": true
+        }
+      },
+      "fvg": {
+        "params": {
+          "min_gap_size": 0.2
+        }
+      },
+      "structure_break": {
+        "params": {
+          "lookback_period": 10,
+          "confirmation_candles": 1,
+          "min_break_percentage": 0.0005
+        }
+      },
+      "doji_candle": {
+        "params": {
+          "max_body_to_range_ratio": 0.1,
+          "min_range_to_price_ratio": 0.005,
+          "lookback_period": 20
+        }
+      },
+      "hidden_order_block": {
+        "params": {
+          "strength_threshold": 0.7,
+          "min_block_size": 0.3,
+          "max_fvg_distance": 5
+        }
+      }
+    },
+    "strategies": {
+      "order_block": {
+        "enabled": true,
+        "params": {
+          "risk_reward_ratio": 2.0,
+          "confidence_threshold": 0.7,
+          "max_signals_per_day": 3
+        }
+      },
+      "hidden_order_block": {
+        "enabled": true,
+        "params": {
+          "risk_reward_ratio": 2.0,
+          "confidence_threshold": 0.7,
+          "max_signals_per_day": 3
+        }
+      }
+    },
+    "market_context": {
+      "analyzers": {
+        "swing": {
+          "lookback": 5,
+          "min_strength": 0.2
+        },
+        "trend": {
+          "lookback": 3
+        },
+        "range": {
+          "min_touches": 3,
+          "min_range_size": 0.5
+        }
+      }
+    }
+  },
   "data":{
     "lookback": 720,
     "custom_timeframes": {

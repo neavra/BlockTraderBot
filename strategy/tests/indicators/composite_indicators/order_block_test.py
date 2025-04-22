@@ -6,9 +6,9 @@ from dataclasses import asdict
 # Import the OrderBlockIndicator class and dependencies
 from strategy.indicators.composite_indicators.order_block import OrderBlockIndicator
 from shared.domain.dto.candle_dto import CandleDto
-from strategy.dto.bos_dto import StructureBreakDto, StructureBreakResultDto
-from strategy.dto.fvg_dto import FvgDto, FvgResultDto
-from strategy.dto.doji_dto import DojiDto, DojiResultDto
+from strategy.domain.dto.bos_dto import StructureBreakDto, StructureBreakResultDto
+from strategy.domain.dto.fvg_dto import FvgDto, FvgResultDto
+from strategy.domain.dto.doji_dto import DojiDto, DojiResultDto
 
 class TestOrderBlockIndicator(unittest.TestCase):
     """Test suite for OrderBlockIndicator class."""

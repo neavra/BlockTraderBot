@@ -1,44 +1,54 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime
+from dataclasses import dataclass, field
 import logging
-from .types import TrendDirection, get_timeframe_category
+from strategy.domain.types.time_frame_enum import TimeframeCategoryEnum
+from strategy.domain.types.trend_direction_enum import TrendDirectionEnum
 
 logger = logging.getLogger(__name__)
 
+@dataclass
 class MarketContext:
-    """Rich domain model representing market state for specific symbol/timeframe"""
-
-    def __init__(self, symbol: str, timeframe: str, exchange: str = 'default'):
-        self.symbol = symbol
-        self.timeframe = timeframe
-        self.exchange = exchange
-        self.timeframe_category = get_timeframe_category(timeframe)
-
-        # Basic info
-        self.timestamp = None
-        self.current_price = None
-
-        # Swing points
-        self.swing_high = None
-        self.swing_low = None
-        self.swing_high_history = []
-        self.swing_low_history = []
-
-        # Trend information
-        self.trend = TrendDirection.UNKNOWN.value
-
-        # Range information
-        self.range_high = None
-        self.range_low = None
-        self.range_equilibrium = None
-        self.is_in_range = False
-        self.range_size = None
-        self.range_strength = None
-        self.range_detected_at = None
-
-        # Metadata
-        self.last_updated = datetime.now().timestamp()
-
+    """Domain model representing market state for a specific symbol/timeframe"""
+    symbol: str
+    timeframe: str
+    exchange: str = "default"
+    
+    # Basic info
+    timestamp: Optional[str] = None
+    current_price: Optional[float] = None
+    
+    # Swing points
+    swing_high: Optional[Dict[str, Any]] = None
+    swing_low: Optional[Dict[str, Any]] = None
+    swing_high_history: List[Dict[str, Any]] = field(default_factory=list)
+    swing_low_history: List[Dict[str, Any]] = field(default_factory=list)
+    
+    # Trend information
+    trend: str = field(default_factory=lambda: TrendDirectionEnum.UNKNOWN.value)
+    
+    # Range information
+    range_high: Optional[float] = None
+    range_low: Optional[float] = None
+    range_equilibrium: Optional[float] = None
+    is_in_range: bool = False
+    range_size: Optional[float] = None
+    range_strength: Optional[float] = None
+    range_detected_at: Optional[str] = None
+    
+    # Fibonacci levels
+    fib_levels: Dict[str, List[Dict[str, Any]]] = field(default_factory=lambda: {"support": [], "resistance": []})
+    
+    # Metadata
+    last_updated: float = field(default_factory=lambda: datetime.now().timestamp())
+    
+    # Computed property (post-init)
+    timeframe_category: TimeframeCategoryEnum = field(init=False)
+    
+    def __post_init__(self):
+        """Initialize computed properties after data class initialization"""
+        self.timeframe_category = TimeframeCategoryEnum.get_timeframe_category(self.timeframe)
+    
     # Basic info methods
     def set_current_price(self, price: float):
         """Set current price"""
@@ -121,6 +131,40 @@ class MarketContext:
             return False
 
         return self.range_low * (1 - tolerance) <= price <= self.range_high * (1 + tolerance)
+    
+    # Fibonacci level methods
+    def set_fib_levels(self, fib_levels: Dict[str, List[Dict[str, Any]]]):
+        """Set Fibonacci levels"""
+        self.fib_levels = fib_levels
+        return self
+    
+    def get_nearest_fib_level(self, price: float, level_type: str = 'all', max_distance_percent: float = 1.0) -> Optional[Dict[str, Any]]:
+        """Find the nearest Fibonacci level to the current price"""
+        levels = []
+        
+        if level_type in ['support', 'all']:
+            levels.extend(self.fib_levels.get('support', []))
+            
+        if level_type in ['resistance', 'all']:
+            levels.extend(self.fib_levels.get('resistance', []))
+            
+        if not levels:
+            return None
+            
+        # Calculate distances
+        for level in levels:
+            level_price = level.get('price', 0)
+            level['distance'] = abs(price - level_price)
+            level['distance_percent'] = (level['distance'] / price) * 100
+            
+        # Filter by maximum distance
+        valid_levels = [l for l in levels if l.get('distance_percent', 100) <= max_distance_percent]
+        
+        if not valid_levels:
+            return None
+            
+        # Return the closest level
+        return min(valid_levels, key=lambda x: x.get('distance', float('inf')))
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert context to dictionary for storage"""
@@ -142,13 +186,23 @@ class MarketContext:
             'range_size': self.range_size,
             'range_strength': self.range_strength,
             'range_detected_at': self.range_detected_at,
+            'fib_levels': self.fib_levels,
             'last_updated': self.last_updated
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'MarketContext':
         """Create context from dictionary"""
-        context = cls(data['symbol'], data['timeframe'])
+        # Filter out keys that aren't valid for the dataclass constructor
+        init_keys = {f.name for f in fields(cls) if f.init}
+        init_data = {k: v for k, v in data.items() if k in init_keys}
+        
+        # Create the instance
+        context = cls(**init_data)
+        
+        # Set other attributes after initialization
         for key, value in data.items():
-            setattr(context, key, value)
+            if key not in init_keys and hasattr(context, key):
+                setattr(context, key, value)
+                
         return context

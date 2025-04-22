@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from strategy.dto.indicator_result_dto import IndicatorResultDto
+from strategy.domain.dto.indicator_result_dto import IndicatorResultDto
 from shared.domain.dto.candle_dto import CandleDto
-from strategy.dto.bos_dto import StructureBreakDto
-from strategy.dto.fvg_dto import FvgDto
-from strategy.dto.doji_dto import DojiDto
+from strategy.domain.dto.bos_dto import StructureBreakDto
+from strategy.domain.dto.fvg_dto import FvgDto
+from strategy.domain.dto.doji_dto import DojiDto
 
 
 @dataclass

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, Union, TypeVar, Generic
-from strategy.dto.indicator_result_dto import IndicatorResultDto
+from strategy.domain.dto.indicator_result_dto import IndicatorResultDto
 
 # Generic type for result DTOs
 T = TypeVar('T', bound=IndicatorResultDto)

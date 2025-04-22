@@ -5,7 +5,7 @@ from typing import Dict, Any, List
 
 # Import the StructureBreakIndicator class
 from strategy.indicators.bos import StructureBreakIndicator
-from strategy.dto.bos_dto import StructureBreakDto, StructureBreakResultDto
+from strategy.domain.dto.bos_dto import StructureBreakDto, StructureBreakResultDto
 from shared.domain.dto.candle_dto import CandleDto
 
 class TestStructureBreakIndicator(unittest.TestCase):

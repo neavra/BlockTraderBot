@@ -1,7 +1,7 @@
 import logging
 from typing import List, Dict, Any
 from .base import BaseAnalyzer
-from ..types import TrendDirection
+from strategy.domain.types.trend_direction_enum import TrendDirectionEnum
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class TrendAnalyzer(BaseAnalyzer):
         # So this method doesn't do much on its own
         return {}
     
-    def analyze_trend(self, swing_highs: List[Dict[str, Any]], swing_lows: List[Dict[str, Any]]) -> TrendDirection:
+    def analyze_trend(self, swing_highs: List[Dict[str, Any]], swing_lows: List[Dict[str, Any]]) -> TrendDirectionEnum:
         """
         Analyze trend direction based on swing highs and lows
         
@@ -41,11 +41,11 @@ class TrendAnalyzer(BaseAnalyzer):
             swing_lows: List of swing low points, each with at least 'price' and 'index' fields
             
         Returns:
-            TrendDirection enum indicating the detected trend
+            TrendDirectionEnum enum indicating the detected trend
         """
         # Check if we have enough swing points to determine a trend
         if len(swing_highs) < 2 or len(swing_lows) < 2:
-            return TrendDirection.UNKNOWN
+            return TrendDirectionEnum.UNKNOWN
         
         # Sort swing points by index (chronological order)
         sorted_highs = sorted(swing_highs, key=lambda x: x['index'])
@@ -69,11 +69,11 @@ class TrendAnalyzer(BaseAnalyzer):
         
         # Determine trend direction
         if higher_highs and higher_lows:
-            return TrendDirection.UP
+            return TrendDirectionEnum.UP
         elif lower_highs and lower_lows:
-            return TrendDirection.DOWN
+            return TrendDirectionEnum.DOWN
         else:
-            return TrendDirection.NEUTRAL
+            return TrendDirectionEnum.NEUTRAL
     
     def update_market_context(self, context, candles: List[Dict[str, Any]]):
         """

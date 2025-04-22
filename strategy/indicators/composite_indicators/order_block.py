@@ -1,12 +1,12 @@
 from typing import Dict, Any, List, Tuple, Optional
 from datetime import datetime, timezone
 from strategy.indicators.base import Indicator
-from strategy.dto.order_block_dto import OrderBlockDto, OrderBlockResultDto
+from strategy.domain.dto.order_block_dto import OrderBlockDto, OrderBlockResultDto
 import logging
 from shared.domain.dto.candle_dto import CandleDto
-from strategy.dto.bos_dto import StructureBreakDto, StructureBreakResultDto
-from strategy.dto.fvg_dto import FvgDto, FvgResultDto
-from strategy.dto.doji_dto import DojiDto, DojiResultDto
+from strategy.domain.dto.bos_dto import StructureBreakDto, StructureBreakResultDto
+from strategy.domain.dto.fvg_dto import FvgDto, FvgResultDto
+from strategy.domain.dto.doji_dto import DojiDto, DojiResultDto
 
 logger = logging.getLogger(__name__)
 
