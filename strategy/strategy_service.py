@@ -227,23 +227,23 @@ class StrategyService:
     #         logger.error(f"Failed to initialize data event consumer: {e}")
     #         raise
     
-    def _on_candle_event(self, event: Dict[str, Any]):
-        """
-        Callback for handling candle events from the queue.
-        This is called when a new candle is received.
+    # def _on_candle_event(self, event: Dict[str, Any]):
+    #     """
+    #     Callback for handling candle events from the queue.
+    #     This is called when a new candle is received.
         
-        Args:
-            event: Candle event data
-        """
-        try:
-            logger.debug(f"Received candle event: {event.get('symbol')} {event.get('timeframe')}")
+    #     Args:
+    #         event: Candle event data
+    #     """
+    #     try:
+    #         logger.debug(f"Received candle event: {event.get('symbol')} {event.get('timeframe')}")
             
-            # Schedule strategy execution in the background
-            # This allows us to react to new market data immediately
-            if self.main_loop and self.strategy_runner:
-                asyncio.run_coroutine_threadsafe(
-                    self.strategy_runner.execute_strategies(),
-                    self.main_loop
-                )
-        except Exception as e:
-            logger.error(f"Error processing candle event: {e}")
+    #         # Schedule strategy execution in the background
+    #         # This allows us to react to new market data immediately
+    #         if self.main_loop and self.strategy_runner:
+    #             asyncio.run_coroutine_threadsafe(
+    #                 self.strategy_runner.execute_strategies(),
+    #                 self.main_loop
+    #             )
+    #     except Exception as e:
+    #         logger.error(f"Error processing candle event: {e}")

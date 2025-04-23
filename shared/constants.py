@@ -71,7 +71,7 @@ class CacheTTL:
     
     # Specific TTLs
     CANDLE_DATA = 1 * HOUR
-    MARKET_STATE = 1 * DAY
+    MARKET_STATE = 7 * DAY
     ORDER_DATA = 30 * DAY
     SIGNAL_DATA = 7 * DAY
     HEARTBEAT = 5 * MINUTE

@@ -6,6 +6,7 @@ from strategy.domain.types.time_frame_enum import TimeframeEnum, TimeframeCatego
 from strategy.domain.models.market_context import MarketContext
 from shared.constants import CacheKeys, CacheTTL
 from strategy.context.analyzers.factory import AnalyzerFactory
+from strategy.context.analyzers.base import BaseAnalyzer
 from shared.cache.cache_service import CacheService
 from shared.domain.dto.candle_dto import CandleDto
 from data.database.db import Database
@@ -52,7 +53,7 @@ class ContextEngine:
         self.running = False
         
         # Components to be initialized in start()
-        self.analyzers = {}
+        self.analyzers: Dict[str, BaseAnalyzer] = {}
         self.main_loop = None
     
     async def start(self):
@@ -173,9 +174,7 @@ class ContextEngine:
         
         return contexts
     
-    async def update_context(
-        self, symbol: str, timeframe: str, candles: List[CandleDto], exchange: str = None
-    ) -> Optional[MarketContext]:
+    async def update_context(self, symbol: str, timeframe: str, candles: List[CandleDto], exchange: str = None) -> Optional[MarketContext]:
         if not candles:
             logger.warning(f"No candles provided for {symbol} {timeframe}")
             return None
@@ -187,23 +186,29 @@ class ContextEngine:
         context = MarketContext(symbol, timeframe, exchange)
         context.timestamp = datetime.now().isoformat()
         context.set_current_price(candles[-1].close)
-
+        updatedFlag = False
         for analyzer_type, analyzer in self.analyzers.items():
             if analyzer:
                 try:
-                    context = analyzer.update_market_context(context, candles)
+                    context, updated = analyzer.update_market_context(context, candles)
+                    if updated:
+                        updatedFlag = True
                 except Exception as e:
                     logger.error(f"Error updating context with {analyzer_type} analyzer: {e}")
 
         context.last_updated = datetime.now().timestamp()
 
         # need to check the context properly here
-        
+        if not context.is_complete():
+            logger.info(f"Market Context is incomplete {context}")
+            return None
+        # If this is the first market context created, add it to the cache
+        # Else, add the old one to the repository and set the new one to the cache
         if is_first_time:
             self.cache_service.set(cache_key, context, expiry=CacheTTL.MARKET_STATE)
-
-        else:
+        elif updatedFlag:
             try:
+                # TODO Implement Storing to repository
                 await self._store_context_history(existing_context)
             except Exception as e:
                 logger.error(f"Error storing historical context: {e}")
@@ -218,11 +223,12 @@ class ContextEngine:
         Returns None if any required context is missing.
         """
         required_timeframes = TIMEFRAME_HIERARCHY.get(base_timeframe, [])
-
+        if not required_timeframes:
+            logger.warning(f"Timeframe {base_timeframe} not supported")
         contexts = []
         for tf in required_timeframes:
             cache_key = self._get_context_cache_key(symbol, tf, exchange)
-            context = self.contexts.get(cache_key)
+            context = self.cache_service.get(cache_key)
 
             if not context:
                 logger.debug(f"Missing context for {symbol} {tf} on {exchange}")

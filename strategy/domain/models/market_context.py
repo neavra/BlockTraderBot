@@ -59,12 +59,12 @@ class MarketContext:
 
     # Swing point methods
     def set_swing_high(self, swing_high: Dict[str, Any]):
-        """Set new swing high and update history"""
+        """Set new swing high"""
         self.swing_high = swing_high
         return self
 
     def set_swing_low(self, swing_low: Dict[str, Any]):
-        """Set new swing low and update history"""
+        """Set new swing low"""
         self.swing_low = swing_low
         return self
 
@@ -156,8 +156,6 @@ class MarketContext:
             'current_price': self.current_price,
             'swing_high': self.swing_high,
             'swing_low': self.swing_low,
-            'swing_high_history': self.swing_high_history,
-            'swing_low_history': self.swing_low_history,
             'trend': self.trend,
             'range_high': self.range_high,
             'range_low': self.range_low,
@@ -186,3 +184,14 @@ class MarketContext:
                 setattr(context, key, value)
                 
         return context
+    
+    def is_complete(self) -> bool:
+        """Check if context has all essential components"""
+        return all([
+            self.symbol,
+            self.timeframe,
+            self.exchange,
+            self.swing_high is not None,
+            self.swing_low is not None,
+            bool(self.fib_levels.get("support")) or bool(self.fib_levels.get("resistance")),
+        ])
