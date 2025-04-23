@@ -2,7 +2,7 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 from dataclasses import dataclass, field, fields
 import logging
-from strategy.domain.types.time_frame_enum import TimeframeCategoryEnum
+from strategy.domain.types.time_frame_enum import TimeframeCategoryEnum, get_timeframe_category
 from strategy.domain.types.trend_direction_enum import TrendDirectionEnum
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,8 @@ class MarketContext:
     
     def __post_init__(self):
         """Initialize computed properties after data class initialization"""
-        self.timeframe_category = TimeframeCategoryEnum.get_timeframe_category(self.timeframe)
+        # Use the standalone function instead of the enum method
+        self.timeframe_category = get_timeframe_category(self.timeframe)
     
     # Basic info methods
     def set_current_price(self, price: float):
