@@ -1,114 +1,124 @@
+from typing import List, Dict, Any, Optional, Tuple
 import logging
-from typing import List, Dict, Any, Optional
-from .base import BaseAnalyzer
+
+from strategy.context.analyzers.base import BaseAnalyzer
+from shared.domain.dto.candle_dto import CandleDto
+from strategy.domain.models.market_context import MarketContext
 
 logger = logging.getLogger(__name__)
 
 class SwingDetector(BaseAnalyzer):
     """
-    A swing detector that identifies swing highs and lows in price data
-    and updates market context when new swings are detected.
+    Swing detector that identifies the most recent confirmed swing highs and lows,
+    and updates the market context if they are newer or more extreme than previous ones.
     """
-    
-    def __init__(self, lookback: int = 5, min_strength: float = 0.5):
+
+    def __init__(self, lookback: int = 5):
         """
-        Initialize the swing detector with parameters
-        
         Args:
-            lookback: Number of candles to look back/forward for swing confirmation
-            min_strength: Minimum percentage change required for a valid swing (0.5 = 0.5%)
+            lookback: Minimum number of candles required to begin swing detection
         """
         self.lookback = lookback
-        self.min_strength_pct = min_strength / 100.0  # Convert to decimal
-    
-    def analyze(self, candles: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """
-        Detect the most recent swing high and low points in the candle data
-        
-        Args:
-            candles: List of candle dictionaries with OHLCV data
-            
-        Returns:
-            Dictionary with the latest swing high and low
-        """
-        if len(candles) < self.lookback * 2 + 1:
-            logger.warning(f"Not enough candles for swing detection. Need at least {self.lookback * 2 + 1}")
+
+    def analyze(self, candles: List[CandleDto]) -> Dict[str, Optional[Dict[str, Any]]]:
+        if len(candles) < self.lookback:
+            logger.warning(f"Not enough candles to detect swings (required: {self.lookback})")
             return {"swing_high": None, "swing_low": None}
-        
-        # Extract price data
-        highs = [c.get('high', c.get('close', 0)) for c in candles]
-        lows = [c.get('low', c.get('close', 0)) for c in candles]
-        timestamps = [c.get('timestamp', i) for i, c in enumerate(candles)]
-        
-        latest_swing_high = None
-        latest_swing_low = None
-        
-        # Start from the lookback position and work towards the most recent candles
-        # We stop at lookback from the end because we need future candles to confirm swings
-        for i in range(self.lookback, len(candles) - self.lookback):
-            # Check for swing high
-            is_swing_high = all(highs[i] >= highs[i-j] for j in range(1, self.lookback+1)) and \
-                            all(highs[i] >= highs[i+j] for j in range(1, self.lookback+1))
-                           
-            if is_swing_high:
-                # Calculate swing strength (how significant is this swing)
-                left_min = min(lows[max(0, i-self.lookback):i])
-                swing_strength = (highs[i] - left_min) / left_min
-                
-                # Only consider if strength is significant
-                if swing_strength >= self.min_strength_pct:
-                    latest_swing_high = {
-                        'price': highs[i],
-                        'index': i,
-                        'timestamp': timestamps[i],
-                        'strength': swing_strength
-                    }
-            
-            # Check for swing low
-            is_swing_low = all(lows[i] <= lows[i-j] for j in range(1, self.lookback+1)) and \
-                           all(lows[i] <= lows[i+j] for j in range(1, self.lookback+1))
-                           
-            if is_swing_low:
-                # Calculate swing strength
-                left_max = max(highs[max(0, i-self.lookback):i])
-                swing_strength = (left_max - lows[i]) / left_max
-                
-                # Only consider if strength is significant
-                if swing_strength >= self.min_strength_pct:
-                    latest_swing_low = {
-                        'price': lows[i],
-                        'index': i,
-                        'timestamp': timestamps[i],
-                        'strength': swing_strength
-                    }
-        
+
+        highest_swing_high = None
+        lowest_swing_low = None
+
+        for i in range(1, len(candles) - 1):
+            prev = candles[i - 1]
+            curr = candles[i]
+            next = candles[i + 1]
+
+            # Confirmed swing high
+            if curr.high > prev.high and curr.high > next.high:
+                candidate = {
+                    "price": curr.high,
+                    "index": i,
+                    "timestamp": curr.timestamp,
+                }
+
+                if (
+                    not highest_swing_high
+                    or candidate["price"] > highest_swing_high["price"]
+                    or (
+                        candidate["price"] == highest_swing_high["price"]
+                        and candidate["index"] > highest_swing_high["index"]
+                    )
+                ):
+                    highest_swing_high = candidate
+
+            # Confirmed swing low
+            if curr.low < prev.low and curr.low < next.low:
+                candidate = {
+                    "price": curr.low,
+                "index": i,
+                "timestamp": curr.timestamp,
+            }
+
+            if (
+                not lowest_swing_low
+                or candidate["price"] < lowest_swing_low["price"]
+                or (
+                    candidate["price"] == lowest_swing_low["price"]
+                    and candidate["index"] > lowest_swing_low["index"]
+                )
+            ):
+                lowest_swing_low = candidate
+
         return {
-            "swing_high": latest_swing_high,
-            "swing_low": latest_swing_low
+            "swing_high": highest_swing_high,
+            "swing_low": lowest_swing_low
         }
-    
-    def update_market_context(self, context, candles: List[Dict[str, Any]]):
+
+
+    def update_market_context(
+        self,
+        current_context: MarketContext,
+        candles: List[CandleDto]
+    ) -> Tuple[MarketContext, bool]:
         """
-        Update market context with newly detected swing points
+        Update the MarketContext with new swing high/low if newer or more extreme.
+        Ensures that if one swing side is missing, the other still updates without clearing the missing side.
         
-        Args:
-            context: MarketContext object to update
-            candles: List of candle dictionaries with OHLCV data
-            
         Returns:
-            Updated MarketContext
+            Tuple of (Updated MarketContext, update flag)
         """
-        # Detect latest swings
         swings = self.analyze(candles)
-        
-        # Update swing high if detected
-        if swings['swing_high'] is not None:
-            context.set_swing_high(swings['swing_high'])
-            logger.info(f"New swing high detected at price {swings['swing_high']['price']}")
-        
-        # Update swing low if detected
-        if swings['swing_low'] is not None:
-            context.set_swing_low(swings['swing_low'])
-            logger.info(f"New swing low detected at price {swings['swing_low']['price']}")
-        
-        return context
+        updated = False
+
+        new_high = swings["swing_high"]
+        old_high = current_context.swing_high
+        new_low = swings["swing_low"]
+        old_low = current_context.swing_low
+
+        # If there is a new high, check if its higher than the old high, if it is, set updated and set new high
+        # If it is not, check if old high exist, if yes, set old high, else set as None (first market context case)
+        if new_high:
+            if (not old_high) or (
+                new_high["price"] >= old_high["price"] and new_high["index"] > old_high["index"]
+            ):
+                current_context.set_swing_high(new_high)
+                updated = True
+            else:
+                current_context.set_swing_high(old_high)
+        elif old_high:
+            current_context.set_swing_high(old_high)
+
+        # Handle Swing Low
+        if new_low:
+            if (not old_low) or (
+                new_low["price"] <= old_low["price"] and new_low["index"] > old_low["index"]
+            ):
+                current_context.set_swing_low(new_low)
+                updated = True
+            else:
+                current_context.set_swing_low(old_low)
+        elif old_low:
+            current_context.set_swing_low(old_low)
+
+        return current_context, updated
+
