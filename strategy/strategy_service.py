@@ -190,6 +190,7 @@ class StrategyService:
                 cache_service=self.cache_service,
                 producer_queue=self.producer_queue,
                 consumer_queue=self.consumer_queue,
+                context_engine=self.context_engine,
                 config=self.config.get('strategy', {})
             )
             

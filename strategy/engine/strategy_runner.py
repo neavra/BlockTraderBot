@@ -6,9 +6,11 @@ from datetime import datetime
 
 from strategy.engine.indicator_dag import IndicatorDAG
 from strategy.strategies.base import Strategy
+from strategy.context.context_engine import ContextEngine
 from shared.domain.dto.signal_dto import SignalDto
 from shared.queue.queue_service import QueueService
 from shared.cache.cache_service import CacheService
+from shared.domain.dto.candle_dto import CandleDto
 from shared.constants import Exchanges, Queues, RoutingKeys, CacheKeys, CacheTTL
 
 logger = logging.getLogger(__name__)
@@ -29,6 +31,7 @@ class StrategyRunner:
         cache_service: CacheService,
         producer_queue: QueueService,
         consumer_queue: QueueService,
+        context_engine: ContextEngine,
         config: Dict[str, Any]
     ):
         """
@@ -42,6 +45,7 @@ class StrategyRunner:
             config: Configuration dictionary
         """
         self.strategies = strategies
+        self.context_engine =context_engine
         # Holds Candle Data
         self.cache_service = cache_service
         # Produces Signals generated from the data
@@ -174,33 +178,45 @@ class StrategyRunner:
     async def _execute_on_event(self, event: Dict[str, Any], source: str):
         """
         Execute strategies based on a candle event.
-        
+
         Args:
             event: Candle event data
             source: Event source ('historical' or 'live')
         """
         try:
+            exchange = event.get('exchange')
             symbol = event.get('symbol')
             timeframe = event.get('timeframe')
-            
+
             if not symbol or not timeframe:
                 logger.warning(f"Missing required fields in candle event: {event}")
                 return
-            
+
             # Get market data from the appropriate source
             data = await self._get_market_data_by_source(symbol, timeframe, source)
-            
+
             if not data:
                 logger.warning(f"No market data available for {symbol} {timeframe} from {source}")
                 return
-            
+
+            # 1. First update current context
+            await self.context_engine.update_context(symbol, timeframe, data, exchange)
+
+            # 2. Then try to get the MTF set
+            mtf_contexts = await self.context_engine.get_multi_timeframe_contexts(symbol, timeframe, exchange)
+
+            if not mtf_contexts:
+                logger.info(f"Incomplete MTF context for {symbol} {timeframe}. Skipping strategy execution.")
+                return
+
             # Execute all applicable strategies with this data
             await self.execute_strategies(data)
-            
+
         except Exception as e:
             logger.error(f"Error in event-based strategy execution: {e}", exc_info=True)
+
     
-    async def _get_market_data_by_source(self, symbol: str, timeframe: str, source: str) -> Optional[Dict[str, Any]]:
+    async def _get_market_data_by_source(self, exchange:str, symbol: str, timeframe: str, source: str) -> Optional[List[CandleDto]]:
         """
         Retrieve market data based on the source type.
         Uses the last updated timestamp to get candles after that time from the appropriate
@@ -219,21 +235,21 @@ class StrategyRunner:
             if source == 'historical':
                 # For historical data, use the historical candle set
                 candles_sorted_set_key = CacheKeys.CANDLE_HISTORY_REST_API_DATA.format(
-                    exchange=self.config.get('exchange', 'default'),
+                    exchange=exchange,
                     symbol=symbol,
                     timeframe=timeframe
                 )
             else:
                 # For live data, use the live candle set
                 candles_sorted_set_key = CacheKeys.CANDLE_LIVE_WEBSOCKET_DATA.format(
-                    exchange=self.config.get('exchange', 'default'),
+                    exchange=exchange,
                     symbol=symbol,
                     timeframe=timeframe
                 )
             
             # Get the last updated timestamp key
             last_updated_key = CacheKeys.CANDLE_LAST_UPDATED.format(
-                    exchange=self.config.get('exchange', 'default'),
+                    exchange=exchange,
                     symbol=symbol,
                     timeframe=timeframe
                 )

@@ -12,6 +12,19 @@ from data.database.db import Database
 
 logger = logging.getLogger(__name__)
 
+TIMEFRAME_HIERARCHY: Dict[str, List[str]] = {
+        "1m": ["1m", "5m", "15m"],
+        "5m": ["5m", "15m", "1h"],
+        "15m": ["15m", "1h", "4h"],
+        "30m": ["30m", "1h", "4h"],
+        "1h": ["1h", "4h", "1d"],
+        "2h": ["2h", "4h", "1d"],
+        "4h": ["4h", "1d", "1w"],
+        "1d": ["1d", "1w"],
+        "1w": ["1w", "1M"],
+        "1M": ["1M"]
+    }
+
 class ContextEngine:
     """
     Main engine for market context analysis and maintenance.
@@ -160,66 +173,64 @@ class ContextEngine:
         
         return contexts
     
-    async def update_context(self, symbol: str, timeframe: str, candles: List[CandleDto],
-                      exchange: str = None) -> Optional[MarketContext]:
-        """
-        Update or create market context with new candle data
-        
-        Args:
-            symbol: Trading symbol (e.g., 'BTCUSDT')
-            timeframe: Candle timeframe (e.g., '1h', '15m')
-            candles: List of CandleDto objects
-            exchange: Exchange identifier (e.g., 'binance')
-            
-        Returns:
-            Updated MarketContext object or None if no candles provided
-        """
+    async def update_context(
+        self, symbol: str, timeframe: str, candles: List[CandleDto], exchange: str = None
+    ) -> Optional[MarketContext]:
         if not candles:
             logger.warning(f"No candles provided for {symbol} {timeframe}")
             return None
-            
-        # Use default exchange if not provided
-        exchange = exchange or self.config.get('exchange', 'default')
-        
-        # Get existing context from cache
+
         cache_key = self._get_context_cache_key(symbol, timeframe, exchange)
-        existing_context_data = self.cache_service.get(cache_key)
-        
-        if existing_context_data:
-            # Store old context in database for historical reference
-            try:
-                await self._store_context_history(existing_context_data)
-            except Exception as e:
-                logger.error(f"Error storing historical context: {e}")
-            
-            # Convert to MarketContext
-            context = MarketContext.from_dict(existing_context_data)
-        else:
-            # Create new context if not found
-            context = MarketContext(symbol, timeframe, exchange)
-            
-        # Update basic info
+        existing_context = self.cache_service.get(cache_key)
+        is_first_time = existing_context is None
+
+        context = MarketContext(symbol, timeframe, exchange)
         context.timestamp = datetime.now().isoformat()
         context.set_current_price(candles[-1].close)
-            
-        # Update using analyzers
+
         for analyzer_type, analyzer in self.analyzers.items():
             if analyzer:
                 try:
                     context = analyzer.update_market_context(context, candles)
                 except Exception as e:
                     logger.error(f"Error updating context with {analyzer_type} analyzer: {e}")
-                    
+
         context.last_updated = datetime.now().timestamp()
-            
-        # Save to cache
-        self.cache_service.set(
-            cache_key,
-            context.to_dict(),
-            expiry=CacheTTL.MARKET_STATE
-        )
-            
+
+        # need to check the context properly here
+        
+        if is_first_time:
+            self.cache_service.set(cache_key, context, expiry=CacheTTL.MARKET_STATE)
+
+        else:
+            try:
+                await self._store_context_history(existing_context)
+            except Exception as e:
+                logger.error(f"Error storing historical context: {e}")
+
         return context
+    
+    async def get_multi_timeframe_contexts(
+        self, symbol: str, base_timeframe: str, exchange: str = "default"
+    ) -> Optional[List[MarketContext]]:
+        """
+        Get required multi-timeframe MarketContexts for a base timeframe.
+        Returns None if any required context is missing.
+        """
+        required_timeframes = TIMEFRAME_HIERARCHY.get(base_timeframe, [])
+
+        contexts = []
+        for tf in required_timeframes:
+            cache_key = self._get_context_cache_key(symbol, tf, exchange)
+            context = self.contexts.get(cache_key)
+
+            if not context:
+                logger.debug(f"Missing context for {symbol} {tf} on {exchange}")
+                return None
+
+            contexts.append(context)
+
+        return contexts
     
     async def _store_context_history(self, context_data: Dict[str, Any]) -> None:
         """
