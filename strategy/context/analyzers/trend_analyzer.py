@@ -86,19 +86,19 @@ class TrendAnalyzer(BaseAnalyzer):
         Returns:
             Updated MarketContext
         """
-        # Extract swing histories from context
-        swing_high_history = context.swing_high_history
-        swing_low_history = context.swing_low_history
+        # # Extract swing histories from context
+        # swing_high_history = context.swing_high_history
+        # swing_low_history = context.swing_low_history
         
-        # Analyze trend
-        trend = self.analyze_trend(swing_high_history, swing_low_history)
+        # # Analyze trend
+        # trend = self.analyze_trend(swing_high_history, swing_low_history)
         
-        # Update market context with trend information
-        prev_trend = context.trend
-        context.set_trend(trend.value)
+        # # Update market context with trend information
+        # prev_trend = context.trend
+        # context.set_trend(trend.value)
         
-        # Log if trend changed
-        if prev_trend != trend.value:
-            logger.info(f"Trend changed from {prev_trend} to {trend.value}")
+        # # Log if trend changed
+        # if prev_trend != trend.value:
+        #     logger.info(f"Trend changed from {prev_trend} to {trend.value}")
         
         return context

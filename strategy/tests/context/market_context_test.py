@@ -176,8 +176,6 @@ class MarketContextTest(unittest.TestCase):
             'current_price': 3000.0,
             'swing_high': self.swing_high,
             'swing_low': self.swing_low,
-            'swing_high_history': [self.swing_high],
-            'swing_low_history': [self.swing_low],
             'trend': TrendDirectionEnum.DOWN.value,
             'range_high': 3200.0,
             'range_low': 2800.0,

@@ -181,23 +181,27 @@ class ContextEngine:
 
         cache_key = self._get_context_cache_key(symbol, timeframe, exchange)
         existing_context = self.cache_service.get(cache_key)
-        is_first_time = existing_context is None
+        is_first_time = False
+        if existing_context is None:
+            is_first_time = True
+            existing_context = MarketContext(symbol, timeframe, exchange)
 
         context = MarketContext(symbol, timeframe, exchange)
-        context.timestamp = datetime.now().isoformat()
-        context.set_current_price(candles[-1].close)
         updatedFlag = False
         for analyzer_type, analyzer in self.analyzers.items():
             if analyzer:
                 try:
-                    context, updated = analyzer.update_market_context(context, candles)
+                    context, updated = analyzer.update_market_context(existing_context, candles)
                     if updated:
                         updatedFlag = True
                 except Exception as e:
                     logger.error(f"Error updating context with {analyzer_type} analyzer: {e}")
 
+        # Update time stamp for context
         context.last_updated = datetime.now().timestamp()
-
+        context.timestamp = datetime.now().isoformat()
+        context.set_current_price(candles[-1].close)
+        
         # need to check the context properly here
         if not context.is_complete():
             logger.info(f"Market Context is incomplete {context}")
@@ -207,6 +211,7 @@ class ContextEngine:
         if is_first_time:
             self.cache_service.set(cache_key, context, expiry=CacheTTL.MARKET_STATE)
         elif updatedFlag:
+            self.cache_service.set(cache_key, context, expiry=CacheTTL.MARKET_STATE)
             try:
                 # TODO Implement Storing to repository
                 await self._store_context_history(existing_context)
@@ -238,7 +243,7 @@ class ContextEngine:
 
         return contexts
     
-    async def _store_context_history(self, context_data: Dict[str, Any]) -> None:
+    async def _store_context_history(self, context_data: MarketContext) -> None:
         """
         Store historical context data in the database
         
@@ -253,9 +258,9 @@ class ContextEngine:
             historical_context = {
                 "context_data": context_data,
                 "archived_at": datetime.now().isoformat(),
-                "symbol": context_data.get("symbol"),
-                "timeframe": context_data.get("timeframe"),
-                "exchange": context_data.get("exchange")
+                "symbol": context_data.symbol,
+                "timeframe": context_data.timeframe,
+                "exchange": context_data.exchange
             }
             
             # Store in database using appropriate repository

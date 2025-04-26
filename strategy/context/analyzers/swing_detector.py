@@ -27,12 +27,11 @@ class SwingDetector(BaseAnalyzer):
 
         highest_swing_high = None
         lowest_swing_low = None
-
+        candidate = {}
         for i in range(1, len(candles) - 1):
             prev = candles[i - 1]
             curr = candles[i]
             next = candles[i + 1]
-
             # Confirmed swing high
             if curr.high > prev.high and curr.high > next.high:
                 candidate = {
@@ -95,11 +94,9 @@ class SwingDetector(BaseAnalyzer):
         new_low = swings["swing_low"]
         old_low = current_context.swing_low
 
-        # If there is a new high, check if its higher than the old high, if it is, set updated and set new high
-        # If it is not, check if old high exist, if yes, set old high, else set as None (first market context case)
         if new_high:
             if (not old_high) or (
-                new_high["price"] >= old_high["price"] and new_high["index"] > old_high["index"]
+                new_high["price"] >= old_high["price"] and new_high["timestamp"] > old_high["timestamp"]
             ):
                 current_context.set_swing_high(new_high)
                 updated = True
@@ -111,7 +108,7 @@ class SwingDetector(BaseAnalyzer):
         # Handle Swing Low
         if new_low:
             if (not old_low) or (
-                new_low["price"] <= old_low["price"] and new_low["index"] > old_low["index"]
+                new_low["price"] <= old_low["price"] and new_low["timestamp"] > old_low["timestamp"]
             ):
                 current_context.set_swing_low(new_low)
                 updated = True

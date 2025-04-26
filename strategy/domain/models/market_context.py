@@ -195,4 +195,5 @@ class MarketContext:
             self.swing_high is not None,
             self.swing_low is not None,
             bool(self.fib_levels.get("support")) or bool(self.fib_levels.get("resistance")),
+            self.current_price is not None
         ])
