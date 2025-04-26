@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
+from strategy.domain.models.market_context import MarketContext
+
 
 class BaseAnalyzer(ABC):
     """Base class for all market analyzers"""
@@ -18,7 +20,7 @@ class BaseAnalyzer(ABC):
         pass
     
     @abstractmethod
-    def update_market_context(self, context, candles: List[Dict[str, Any]]):
+    def update_market_context(self, context, candles: List[Dict[str, Any]]) -> Tuple[MarketContext, bool]:
         """
         Update market context with analysis results
         

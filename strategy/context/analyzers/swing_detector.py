@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Optional, Tuple
 import logging
+import copy
 
 from strategy.context.analyzers.base import BaseAnalyzer
 from shared.domain.dto.candle_dto import CandleDto

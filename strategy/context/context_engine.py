@@ -10,6 +10,7 @@ from strategy.context.analyzers.base import BaseAnalyzer
 from shared.cache.cache_service import CacheService
 from shared.domain.dto.candle_dto import CandleDto
 from data.database.db import Database
+from data.database.repository.market_context_repository import MarketContextRepository
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +37,7 @@ class ContextEngine:
     def __init__(
         self, 
         cache_service: CacheService,
-        database_service: Database,
+        database: Database,
         config: Dict[str, Any]
     ):
         """
@@ -48,7 +49,7 @@ class ContextEngine:
             config: Configuration dictionary with analyzer parameters
         """
         self.cache_service = cache_service
-        self.database_service = database_service
+        self.repository = MarketContextRepository(database)
         self.config = config
         self.running = False
         
@@ -108,72 +109,6 @@ class ContextEngine:
             timeframe=timeframe
         )
     
-    async def get_context(self, symbol: str, timeframe: str, exchange: str = None) -> Optional[MarketContext]:
-        """
-        Get context for specific symbol/timeframe from cache
-        
-        Args:
-            symbol: Trading symbol (e.g., 'BTCUSDT')
-            timeframe: Candle timeframe (e.g., '1h', '15m')
-            exchange: Exchange identifier (e.g., 'binance')
-            
-        Returns:
-            MarketContext object or None if not found
-        """
-        # Use default exchange if not provided
-        exchange = exchange or self.config.get('exchange', 'default')
-        
-        # Get from cache
-        cache_key = self._get_context_cache_key(symbol, timeframe, exchange)
-        cached_context = self.cache_service.get(cache_key)
-        
-        if cached_context:
-            # Convert from cached data to MarketContext object
-            return MarketContext.from_dict(cached_context)
-        
-        return None
-    
-    async def get_contexts_by_category(self, symbol: str, category: Union[TimeframeCategoryEnum, str], exchange: str = None) -> List[MarketContext]:
-        """
-        Get all contexts for a timeframe category from cache
-        
-        Args:
-            symbol: Trading symbol (e.g., 'BTCUSDT')
-            category: Timeframe category (TimeframeCategoryEnum enum or string value)
-            exchange: Exchange identifier (e.g., 'binance')
-            
-        Returns:
-            List of MarketContext objects matching the criteria
-        """
-        # Use default exchange if not provided
-        exchange = exchange or self.config.get('exchange', 'default')
-        
-        # Convert string category to enum if needed
-        if isinstance(category, str):
-            try:
-                category = TimeframeCategoryEnum(category)
-            except ValueError:
-                # Try to match by value instead
-                for enum_val in TimeframeCategoryEnum:
-                    if enum_val.value == category:
-                        category = enum_val
-                        break
-        
-        # Get all timeframes for this category
-        category_timeframes = []
-        for tf, cat in TimeframeEnum._CATEGORIES.items():
-            if cat == category:
-                category_timeframes.append(tf)
-        
-        # Retrieve contexts for each matching timeframe
-        contexts = []
-        for tf in category_timeframes:
-            context = await self.get_context(symbol, tf, exchange)
-            if context:
-                contexts.append(context)
-        
-        return contexts
-    
     async def update_context(self, symbol: str, timeframe: str, candles: List[CandleDto], exchange: str = None) -> Optional[MarketContext]:
         if not candles:
             logger.warning(f"No candles provided for {symbol} {timeframe}")
@@ -186,7 +121,8 @@ class ContextEngine:
             is_first_time = True
             existing_context = MarketContext(symbol, timeframe, exchange)
 
-        context = MarketContext(symbol, timeframe, exchange)
+        # Note here, that the existing_context object is being edited directly, no new object is created
+        # context == existing_context
         updatedFlag = False
         for analyzer_type, analyzer in self.analyzers.items():
             if analyzer:
@@ -213,7 +149,6 @@ class ContextEngine:
         elif updatedFlag:
             self.cache_service.set(cache_key, context, expiry=CacheTTL.MARKET_STATE)
             try:
-                # TODO Implement Storing to repository
                 await self._store_context_history(existing_context)
             except Exception as e:
                 logger.error(f"Error storing historical context: {e}")
@@ -253,20 +188,6 @@ class ContextEngine:
         # Implementation depends on your database schema
         # This is a placeholder for the actual database operation
         try:
-            # Convert to proper format for database
-            # Add timestamp for historical tracking
-            historical_context = {
-                "context_data": context_data,
-                "archived_at": datetime.now().isoformat(),
-                "symbol": context_data.symbol,
-                "timeframe": context_data.timeframe,
-                "exchange": context_data.exchange
-            }
-            
-            # Store in database using appropriate repository
-            # await self.database_service.context_repository.create(historical_context)
-            pass  # Placeholder until database integration is implemented
-            
+            self.repository.upsert_market_context(context_data)
         except Exception as e:
             logger.error(f"Failed to store historical context: {e}")
-            # Don't re-raise - this is a non-critical operation

@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, Tuple
 import logging
+import copy
 
 from strategy.context.analyzers.base import BaseAnalyzer
 from shared.domain.dto.candle_dto import CandleDto
@@ -30,8 +31,10 @@ class FibonacciAnalyzer(BaseAnalyzer):
         Returns:
             Tuple of (possibly updated MarketContext, update flag)
         """
+        
         swing_high = current_context.swing_high
         swing_low = current_context.swing_low
+        old_fib_levels = current_context.fib_levels
 
         # Only proceed if both swing points exist and are valid
         if not (swing_high and swing_low):
@@ -51,12 +54,16 @@ class FibonacciAnalyzer(BaseAnalyzer):
         uptrend = low_time < high_time
 
         fib_levels = self.analyze(high_price, low_price, uptrend)
+        
+        if (old_fib_levels.get("support") == fib_levels.get("support")) and (old_fib_levels.get("resistance") == fib_levels.get("resistance")):
+            return current_context, False
+        
         current_context.set_fib_levels(fib_levels)
 
         logger.debug(f"Fibonacci levels updated for {'uptrend' if uptrend else 'downtrend'}")
         return current_context, True
 
-    def analyze(self, high_price: float, low_price: float, uptrend: bool) -> Dict[str, List[Dict[str, Any]]]:
+    def analyze(self, high_price: float, low_price: float, uptrend: bool) -> Dict[str, Any]:
         """
         Calculate Fibonacci retracement and extension levels.
         

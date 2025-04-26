@@ -469,12 +469,12 @@ class TestSwingDetector(unittest.IsolatedAsyncioTestCase):
         existing_high = {
             "price": 120.0,  # Higher than any in our test candles
             "index": 0,
-            "timestamp": datetime(2023, 1, 1, 0, 0, tzinfo=timezone.utc).isoformat()
+            "timestamp": datetime(2023, 1, 1, 0, 0, tzinfo=timezone.utc)
         }
         existing_low = {
             "price": 90.0,  # Lower than any in our test candles
             "index": 0,
-            "timestamp": datetime(2023, 1, 1, 0, 0, tzinfo=timezone.utc).isoformat()
+            "timestamp": datetime(2023, 1, 1, 0, 0, tzinfo=timezone.utc)
         }
         
         self.context.set_swing_high(existing_high)

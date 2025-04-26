@@ -15,7 +15,7 @@ class MarketContext:
     exchange: str = "default"
     
     # Basic info
-    timestamp: Optional[str] = None
+    timestamp: Optional[datetime] = None
     current_price: Optional[float] = None
     
     # Swing points

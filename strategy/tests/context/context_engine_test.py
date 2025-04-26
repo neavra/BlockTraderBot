@@ -2,7 +2,7 @@ import unittest
 import asyncio
 from datetime import datetime, timezone
 from typing import List, Dict, Any
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import Mock, MagicMock, patch, AsyncMock
 
 from strategy.context.context_engine import ContextEngine
 from strategy.domain.models.market_context import MarketContext
@@ -18,7 +18,7 @@ class TestContextEngineUpdateContext(unittest.IsolatedAsyncioTestCase):
         """Set up test fixtures before each test method."""
         # Create mock services
         self.cache_service = Mock(spec=CacheService)
-        self.database_service = Mock()
+        self.database = Mock()
         
         # Configure mock cache service to store and retrieve data
         self.cache_data = {}
@@ -46,10 +46,12 @@ class TestContextEngineUpdateContext(unittest.IsolatedAsyncioTestCase):
         # Create context engine
         self.context_engine = ContextEngine(
             cache_service=self.cache_service,
-            database_service=self.database_service,
+            database=self.database,
             config=self.config
         )
-        
+        self.mock_store_context_history = AsyncMock()
+        self.context_engine._store_context_history = self.mock_store_context_history
+
         # Create test data
         self.symbol = 'BTCUSDT'
         self.timeframe = '1h'
@@ -280,8 +282,17 @@ class TestContextEngineUpdateContext(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(context_2.fib_levels['resistance'], context_1.fib_levels['resistance'])
         
         # Verify current price was updated
-        print(context_2)
         self.assertEqual(context_2.current_price, 101.0)  # Last candle's close
+
+        if any([context_1.swing_high != context_2.swing_high,
+                context_1.swing_low != context_2.swing_low,
+                context_1.fib_levels != context_2.fib_levels]):
+            # If there was an update, verify the old context was stored
+            self.mock_store_context_history.assert_called_once_with(context_1)
+        else:
+            # If no update, verify it wasn't called
+            self.mock_store_context_history.assert_not_called()
+
     
     async def test_update_context_with_new_swing_high(self):
         """Test update_context when new candles create a new swing high."""
@@ -305,6 +316,10 @@ class TestContextEngineUpdateContext(unittest.IsolatedAsyncioTestCase):
         cached_context1 = self.cache_data.get(context_key)
         self.assertEqual(cached_context1,context_1)
 
+        old_swing_high = context_1.swing_high
+        old_swing_low = context_1.swing_low
+        old_fibbs_support = context_1.fib_levels.get("support")
+        old_fibbs_resistance = context_1.fib_levels.get("resistance")
         # Create candles with new swing high
         new_high_candles = [
             CandleDto(
@@ -379,8 +394,12 @@ class TestContextEngineUpdateContext(unittest.IsolatedAsyncioTestCase):
         
         # Verify context is returned
         self.assertIsNotNone(context_2)
-        
+        new_swing_high = context_2.swing_high
+        new_swing_low = context_2.swing_low
+        new_fibbs_support = context_2.fib_levels.get("support")
+        new_fibbs_resistance = context_2.fib_levels.get("resistance")
         # Debug print to see what's happening
+        print("===== Debug test with new swing high =====")
         if context_1:
             print(f"Debug - Old Swing High: {cached_context1.swing_high}")
             print(f"Debug - Old Swing Low: {cached_context1.swing_low}")
@@ -410,10 +429,20 @@ class TestContextEngineUpdateContext(unittest.IsolatedAsyncioTestCase):
             for price in resistance_prices:
                 self.assertGreater(price, 115.0)
 
+        if old_swing_high != new_swing_high or old_swing_low != new_swing_low or old_fibbs_resistance != new_fibbs_resistance or old_fibbs_support != new_fibbs_support:
+            # If there was an update, verify the old context was stored
+            self.mock_store_context_history.assert_called_once_with(context_1)
+        else:
+            # If no update, verify it wasn't called
+            self.mock_store_context_history.assert_not_called()
+
     async def test_update_context_with_new_swing_low(self):
         """Test update_context when new candles create a new swing low."""
         # Start the context engine
         await self.context_engine.start()
+
+        # Ensure no existing context
+        self.cache_data.clear()
         
         # First update: establish initial swing points
         context_1 = await self.context_engine.update_context(
@@ -433,6 +462,10 @@ class TestContextEngineUpdateContext(unittest.IsolatedAsyncioTestCase):
         cached_context1 = self.cache_data.get(context_key)
         self.assertEqual(cached_context1, context_1)
 
+        old_swing_high = context_1.swing_high
+        old_swing_low = context_1.swing_low
+        old_fibbs_support = context_1.fib_levels.get("support")
+        old_fibbs_resistance = context_1.fib_levels.get("resistance")
         # Create candles with new swing low
         new_low_candles = [
             CandleDto(
@@ -507,14 +540,22 @@ class TestContextEngineUpdateContext(unittest.IsolatedAsyncioTestCase):
         
         # Verify context is returned
         self.assertIsNotNone(context_2)
-        
+        new_swing_high = context_2.swing_high
+        new_swing_low = context_2.swing_low
+        new_fibbs_support = context_2.fib_levels.get("support")
+        new_fibbs_resistance = context_2.fib_levels.get("resistance")
         # Debug print to see what's happening
+        print("===== Debug test with new swing low =====")
         if context_1:
-            print(f"Debug - Old Swing High: {cached_context1.swing_high}")
-            print(f"Debug - Old Swing Low: {cached_context1.swing_low}")
+            print(f"Debug - Old Swing High: {old_swing_high}")
+            print(f"Debug - Old Swing Low: {old_swing_low}")
+            print(f"Debug - Old Fibbs Support: {old_fibbs_support}")
+            print(f"Debug - Old Fibbs Resistance: {old_fibbs_resistance}")
         if context_2:
-            print(f"Debug - New Swing High: {context_2.swing_high}")
-            print(f"Debug - New Swing Low: {context_2.swing_low}")
+            print(f"Debug - New Swing High: {new_swing_high}")
+            print(f"Debug - New Swing Low: {new_swing_low}")
+            print(f"Debug - New Fibbs Support: {new_fibbs_support}")
+            print(f"Debug - New Fibbs Resistance: {new_fibbs_resistance}")
         
         # Verify swing low was updated
         if context_2 and context_2.swing_low:
@@ -540,6 +581,14 @@ class TestContextEngineUpdateContext(unittest.IsolatedAsyncioTestCase):
             for price in resistance_prices:
                 self.assertGreaterEqual(price, 90.0)
                 self.assertLessEqual(price, 110.0)
+
+            if old_swing_high != new_swing_high or old_swing_low != new_swing_low or old_fibbs_resistance != new_fibbs_resistance or old_fibbs_support != new_fibbs_support:
+                # If there was an update, verify the old context was stored
+                self.mock_store_context_history.assert_called_once_with(context_1)
+            else:
+                # If no update, verify it wasn't called
+                self.mock_store_context_history.assert_not_called()
+
     
     async def test_update_context_first_time(self):
         """Test update_context when no existing context is present."""
@@ -573,7 +622,8 @@ class TestContextEngineUpdateContext(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.cache_service.set.called)
         
         # Verify that _store_context_history was NOT called for first-time context
-        # (Would need proper mocking in real implementation)
+        self.mock_store_context_history.assert_not_called() 
+
     
     async def test_update_context_incomplete_data(self):
         """Test update_context when the resulting context is incomplete."""
@@ -618,6 +668,7 @@ class TestContextEngineUpdateContext(unittest.IsolatedAsyncioTestCase):
         
         # Verify no context was returned since it's incomplete
         self.assertIsNone(context)
+        self.mock_store_context_history.assert_not_called()         
 
 
 if __name__ == '__main__':
