@@ -40,52 +40,57 @@ class FibonacciAnalyzer(BaseAnalyzer):
 
         high_price = swing_high.get("price")
         low_price = swing_low.get("price")
+        high_time = swing_high.get("timestamp")
+        low_time = swing_low.get("timestamp")
 
-        if high_price is None or low_price is None:
+        if high_price is None or low_price is None or high_time is None or low_time is None:
             logger.info("Skipping Fibonacci analysis: invalid swing point values")
             return current_context, False
 
-        fib_levels = self.calculate_levels(high_price, low_price)
+        # Determine if the trend is uptrend or downtrend based on timestamps
+        uptrend = low_time < high_time
+
+        fib_levels = self.analyze(high_price, low_price, uptrend)
         current_context.set_fib_levels(fib_levels)
 
-        logger.debug(f"Fibonacci levels updated — Support: {len(fib_levels['support'])}, Resistance: {len(fib_levels['resistance'])}")
+        logger.debug(f"Fibonacci levels updated for {'uptrend' if uptrend else 'downtrend'}")
         return current_context, True
 
-    def calculate_levels(self, high_price: float, low_price: float) -> Dict[str, List[Dict[str, Any]]]:
+    def analyze(self, high_price: float, low_price: float, uptrend: bool) -> Dict[str, List[Dict[str, Any]]]:
         """
         Calculate Fibonacci retracement and extension levels.
-
+        
         Args:
             high_price: Swing high price
             low_price: Swing low price
-
+            uptrend: Whether the market is in uptrend
+        
         Returns:
             Dictionary with support and resistance levels
         """
         price_range = high_price - low_price
-        uptrend = high_price > low_price
 
         support_levels = []
         resistance_levels = []
 
         if uptrend:
+            # Uptrend: retracements are potential supports, extensions are potential resistances
             for level in self.retracement_levels:
                 fib_price = high_price - (price_range * level)
-                if fib_price < low_price or fib_price > high_price:
-                    continue
-                support_levels.append({'price': fib_price, 'level': level, 'type': 'retracement'})
+                if low_price <= fib_price <= high_price:
+                    support_levels.append({'price': fib_price, 'level': level, 'type': 'retracement'})
             for ext in self.extension_levels:
-                ext_price = low_price + (price_range * ext)
-                resistance_levels.append({'price': ext_price, 'level': ext, 'type': 'extension'})
+                fib_price = high_price + (price_range * ext)
+                resistance_levels.append({'price': fib_price, 'level': ext, 'type': 'extension'})
         else:
+            # Downtrend: retracements are potential resistances, extensions are potential supports
             for level in self.retracement_levels:
                 fib_price = low_price + (price_range * level)
-                if fib_price < low_price or fib_price > high_price:
-                    continue
-                resistance_levels.append({'price': fib_price, 'level': level, 'type': 'retracement'})
+                if low_price <= fib_price <= high_price:
+                    resistance_levels.append({'price': fib_price, 'level': level, 'type': 'retracement'})
             for ext in self.extension_levels:
-                ext_price = high_price - (price_range * ext)
-                support_levels.append({'price': ext_price, 'level': ext, 'type': 'extension'})
+                fib_price = low_price - (price_range * ext)
+                support_levels.append({'price': fib_price, 'level': ext, 'type': 'extension'})
 
         support_levels = sorted(support_levels, key=lambda x: x['price'], reverse=True)
         resistance_levels = sorted(resistance_levels, key=lambda x: x['price'])
@@ -94,3 +99,4 @@ class FibonacciAnalyzer(BaseAnalyzer):
             'support': support_levels,
             'resistance': resistance_levels
         }
+
