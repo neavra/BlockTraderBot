@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, Union, TypeVar, Generic
+from typing import Dict, Any, Optional, Union, TypeVar, Generic, List
 from strategy.domain.dto.indicator_result_dto import IndicatorResultDto
 
 # Generic type for result DTOs
@@ -14,7 +14,7 @@ class Indicator(ABC, Generic[T]):
         self.name = self.__class__.__name__
         
     @abstractmethod
-    async def calculate(self, data: Dict[str, Any]) -> T:
+    async def calculate(self, candle_data: List[Any], dependency_data: Dict[str, Any] = None) -> T:
         """
         Calculate the indicator value based on the provided data
         
