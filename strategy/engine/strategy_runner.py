@@ -12,6 +12,7 @@ from shared.queue.queue_service import QueueService
 from shared.cache.cache_service import CacheService
 from shared.domain.dto.candle_dto import CandleDto
 from shared.constants import Exchanges, Queues, RoutingKeys, CacheKeys, CacheTTL
+from strategy.domain.models.market_context import MarketContext
 
 logger = logging.getLogger(__name__)
 
@@ -193,29 +194,29 @@ class StrategyRunner:
                 return
 
             # Get market data from the appropriate source
-            data = await self._get_market_data_by_source(symbol, timeframe, source)
+            candle_data: List[CandleDto] = await self._get_market_data_by_source(symbol, timeframe, source)
 
-            if not data:
+            if not candle_data:
                 logger.warning(f"No market data available for {symbol} {timeframe} from {source}")
                 return
 
             # 1. First update current context
-            await self.context_engine.update_context(symbol, timeframe, data, exchange)
+            await self.context_engine.update_context(symbol, timeframe, candle_data, exchange)
 
             # 2. Then try to get the MTF set
-            mtf_contexts = await self.context_engine.get_multi_timeframe_contexts(symbol, timeframe, exchange)
+            market_contexts: List[MarketContext] = await self.context_engine.get_multi_timeframe_contexts(symbol, timeframe, exchange)
 
-            if not mtf_contexts:
+            if not market_contexts:
                 logger.info(f"Incomplete MTF context for {symbol} {timeframe}. Skipping strategy execution.")
                 return
 
             # Execute all applicable strategies with this data
-            await self.execute_strategies(data)
+            await self.execute_strategies(candle_data, market_contexts)
 
         except Exception as e:
             logger.error(f"Error in event-based strategy execution: {e}", exc_info=True)
 
-    async def execute_strategies(self, data: Dict[str, Any]):
+    async def execute_strategies(self, candle_data: List[CandleDto], market_contexts: List[MarketContext]):
         """
         Execute all applicable strategies with the provided market data
         
@@ -229,17 +230,18 @@ class StrategyRunner:
                 # Check if strategy is applicable for this symbol and timeframe
                 requirements = strategy.get_requirements()
                 timeframes = requirements.get('timeframes', [])
-                
-                if not timeframes or data.get('timeframe') in timeframes:
+                # Skip timeframe checks for now
+                # if not timeframes or candle_data[0].timeframe in timeframes:
                     # Add this strategy's indicators to the required set
-                    indicators_needed = requirements.get('indicators', [])
-                    required_indicators.update(indicators_needed)
+                indicators_needed = requirements.get('indicators', [])
+                required_indicators.update(indicators_needed)
             
             # Run indicators through the DAG
             # Run indicators should return a dictionary where the keys are the indicator names 
             # and values is a list of indicator values
             indicator_results = await self.indicator_dag.run_indicators(
-                data, 
+                candle_data,
+                market_contexts, 
                 requested_indicators=list(required_indicators)
             )
             
@@ -247,12 +249,12 @@ class StrategyRunner:
             for strategy in self.strategies:
                 try:
                     # Get strategy requirements
-                    requirements = strategy.get_requirements()
-                    timeframes = requirements.get('timeframes', [])
+                    # requirements = strategy.get_requirements()
+                    # timeframes = requirements.get('timeframes', [])
                     
-                    # Skip if this timeframe is not supported by the strategy
-                    if timeframes and data.get('timeframe') not in timeframes:
-                        continue
+                    # # Skip if this timeframe is not supported by the strategy
+                    # if timeframes and candle_data.get('timeframe') not in timeframes:
+                    #     continue
                         
                     # Execute the strategy with enhanced data
                     signal = await strategy.analyze(indicator_results)
@@ -260,7 +262,7 @@ class StrategyRunner:
                     # If a signal was generated, publish it
                     if signal:
                         await self._publish_signal(signal)
-                        logger.info(f"Generated signal from {strategy.name} for {data.get('symbol')} ({data.get('timeframe')})")
+                        logger.info(f"Generated signal from {strategy.name} for {candle_data.get('symbol')} ({candle_data.get('timeframe')})")
                 except Exception as e:
                     logger.error(f"Error executing strategy {strategy.name}: {e}", exc_info=True)
         

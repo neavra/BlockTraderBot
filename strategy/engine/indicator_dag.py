@@ -1,5 +1,9 @@
 import logging
 from typing import Dict, List, Any, Set, Optional
+from shared.domain.dto.candle_dto import CandleDto
+from strategy.domain.models.market_context import MarketContext
+from strategy.indicators.base import Indicator
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -11,11 +15,11 @@ class IndicatorDAG:
     
     def __init__(self):
         """Initialize the indicator DAG."""
-        self.indicators = {}
+        self.indicators: Dict[str,Indicator] = {}
         self.dependencies = {}
         self.execution_order = []
     
-    def register_indicator(self, name: str, indicator_instance: Any, dependencies: Optional[List[str]] = None):
+    def register_indicator(self, name: str, indicator_instance: Indicator, dependencies: Optional[List[str]] = None):
         """
         Register an indicator with its dependencies.
         
@@ -69,12 +73,13 @@ class IndicatorDAG:
         logger.info(f"Computed indicator execution order: {self.execution_order}")
         return self.execution_order
     
-    async def run_indicators(self, data: Dict[str, Any], requested_indicators: Optional[List[str]] = None) -> Dict[str, Any]:
+    async def run_indicators(self, candle_data: List[CandleDto], market_contexts: List[MarketContext], requested_indicators: Optional[List[str]] = None) -> Dict[str, Any]:
         """
         Run indicators in optimal order.
         
         Args:
-            data: Input market data
+            candle_data: Input market data
+            market_contexts: list of market contexts according to time frame hierarchy
             requested_indicators: Specific indicators to run (if None, runs all)
             
         Returns:
@@ -82,6 +87,9 @@ class IndicatorDAG:
         """
         # Compute execution order if not already done
         execution_order = self.compute_execution_order()
+        
+        # Initialize results dictionary
+        results = {}
         
         # Filter to requested indicators if specified
         if requested_indicators is not None:
@@ -97,24 +105,87 @@ class IndicatorDAG:
             
             # Filter execution order to required indicators
             execution_order = [ind for ind in execution_order if ind in required]
-        
+        """
+        Input data dictionary format:
+        {
+            "candles": List[CandleDto],  # List of candle data objects
+            "market_contexts": List[MarketContext],  # List of market context objects for multiple timeframes
+            "symbol": str,  # Trading pair symbol (e.g., "BTCUSDT")
+            "timeframe": str,  # Candle timeframe (e.g., "1h")
+            "exchange": str,  # Exchange name (e.g., "binance")
+            "current_price": float,  # Current market price (optional)
+            
+            # The following keys are added as indicators are executed:
+            "indicator_name_data": IndicatorResultDto,  # Results from each indicator
+        }
+        """
         # Run indicators in order
-        results = {}
+        data = self.build_data_dictionary(candle_data, market_contexts)
         for indicator_name in execution_order:
             try:
-                # Prepare enhanced data with dependency results
-                enhanced_data = data.copy()
-                for dep_name in self.dependencies.get(indicator_name, []):
-                    if dep_name in results:
-                        enhanced_data[f"{dep_name}_data"] = results[dep_name]
-                
-                # Run the indicator
+                # Run the indicator with the continuously enriched data dictionary
                 indicator = self.indicators[indicator_name]
-                results[indicator_name] = await indicator.calculate(enhanced_data)
+                indicator_result = await indicator.calculate(data)
+                
+                # Store result in both results dict and data dict
+                results[indicator_name] = indicator_result
+                data[f"{indicator_name}_data"] = indicator_result
+                
                 logger.debug(f"Executed indicator '{indicator_name}'")
             except Exception as e:
                 logger.error(f"Error executing indicator '{indicator_name}': {e}", exc_info=True)
                 # Continue with other indicators despite errors
                 results[indicator_name] = {"error": str(e)}
+                data[f"{indicator_name}_data"] = {"error": str(e)}
         
         return results
+    
+    def build_data_dictionary(
+        candle_data: List[CandleDto], 
+        market_contexts: List[MarketContext],
+    ) -> Dict[str, Any]:
+        """
+        Build a properly formatted data dictionary for indicator calculations.
+        
+        Args:
+            candle_data: List of candle data objects
+            market_contexts: List of market context objects for multiple timeframes
+            symbol: Trading pair symbol
+            timeframe: Candle timeframe
+            exchange: Exchange name
+            
+        Returns:
+            Dictionary containing all necessary data for indicator calculations
+            
+        Format:
+        {
+            "candles": List[CandleDto],  # List of candle data objects
+            "market_contexts": List[MarketContext],  # List of market context objects
+            "symbol": str,  # Trading pair symbol
+            "timeframe": str,  # Candle timeframe
+            "exchange": str,  # Exchange name
+            "current_price": float,  # Current market price (from most recent candle)
+        }
+        """
+        
+        first_candle = candle_data[0]
+        last_candle = candle_data[-1]
+        
+        symbol = first_candle.symbol
+        timeframe = first_candle.timeframe
+        exchange = first_candle.exchange
+            
+        current_price = last_candle.close
+        
+        # Create the base data dictionary
+        data_dict = {
+            "candles": candle_data,
+            "market_contexts": market_contexts,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "exchange": exchange,
+            "current_price": current_price,
+            "timestamp": datetime.now().isoformat()
+        }
+    
+        return data_dict

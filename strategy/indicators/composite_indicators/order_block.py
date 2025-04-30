@@ -56,7 +56,7 @@ class OrderBlockIndicator(Indicator):
             
         super().__init__(default_params)
     
-    async def calculate(self, candles: List[CandleDto], fvg_data: FvgResultDto, doji_data: DojiResultDto, bos_data: StructureBreakResultDto) -> OrderBlockResultDto:
+    async def calculate(self, data: Dict[str,Any]) -> OrderBlockResultDto:
         """
         Detect order blocks in the provided candle data by combining insights from
         doji candles, FVG, and BOS indicators.
@@ -73,6 +73,11 @@ class OrderBlockIndicator(Indicator):
         Returns:
             OrderBlockResultDto with detected order blocks
         """
+
+        candles: List[CandleDto] = data.get("candles")
+        doji_data: DojiResultDto = data.get("doji_candle_data")
+        fvg_data: FvgResultDto = data.get("fvg_data")
+        bos_data: StructureBreakResultDto = data.get("structure_break_data")
         
         # Need enough candles to detect order blocks
         if len(candles) < 5:
@@ -97,7 +102,6 @@ class OrderBlockIndicator(Indicator):
             return self._get_empty_result()
         bullish_bos = bos_data.bullish_breaks
         bearish_bos = bos_data.bearish_breaks
-        bos_events = bullish_bos + bearish_bos
 
         # Detect order blocks based on composite analysis with the specific sequence:
         # Doji candle -> FVG -> BOS

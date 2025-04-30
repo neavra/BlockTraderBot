@@ -180,6 +180,19 @@ class TestOrderBlockIndicator(unittest.TestCase):
                 )
             ]
         )
+        data_dict = {
+            "candles": self.candles,
+            "doji_candle_data":self.doji_data,
+            "fvg_data": self.fvg_data,
+            "structure_break_data":self.bos_data,
+            "symbol": "BTCUSDT",
+            "timeframe": "1h",
+            "exchange": "binance",
+            "current_price": 100,
+            "timestamp": datetime.now().isoformat()
+        }
+
+        self.data = data_dict
     
     def test_initialization(self):
         """Test initialization with default and custom parameters."""
@@ -200,7 +213,8 @@ class TestOrderBlockIndicator(unittest.TestCase):
         """Test behavior with empty or insufficient candles."""
         async def run_test():
             # Test with empty candles
-            result = await self.indicator.calculate([], self.fvg_data, self.doji_data, self.bos_data)
+            self.data["candles"] = []
+            result = await self.indicator.calculate(self.data)
             self.assertEqual(len(result.demand_blocks), 0)
             self.assertEqual(len(result.supply_blocks), 0)
             self.assertFalse(result.has_demand_block)
@@ -208,7 +222,8 @@ class TestOrderBlockIndicator(unittest.TestCase):
             self.assertIsNone(result.latest_block)
             
             # Test with insufficient candles (less than 5)
-            result = await self.indicator.calculate(self.candles[:4], self.fvg_data, self.doji_data, self.bos_data)
+            self.data["candles"] = self.candles[:4]
+            result = await self.indicator.calculate(self.data)
             self.assertEqual(len(result.demand_blocks), 0)
             self.assertEqual(len(result.supply_blocks), 0)
             
@@ -218,7 +233,8 @@ class TestOrderBlockIndicator(unittest.TestCase):
         """Test behavior when required indicator data is missing."""
         async def run_test():
             # Test without doji data (required)
-            result = await self.indicator.calculate(self.candles, self.fvg_data, [], self.bos_data)
+            self.data["doji_candle_data"] = []
+            result = await self.indicator.calculate(self.data)
             self.assertEqual(len(result.demand_blocks), 0)
             self.assertEqual(len(result.supply_blocks), 0)
             self.assertFalse(result.has_demand_block)
@@ -230,7 +246,7 @@ class TestOrderBlockIndicator(unittest.TestCase):
         """Test detection of both demand and supply order blocks."""
         async def run_test():            
             # Test with default indicator (requires BOS)
-            result = await self.indicator.calculate(self.candles, self.fvg_data, self.doji_data, self.bos_data)
+            result = await self.indicator.calculate(self.data)
             
             # We should detect both a demand and supply block
             self.assertTrue(result.has_demand_block)
@@ -259,7 +275,7 @@ class TestOrderBlockIndicator(unittest.TestCase):
         """Test detection with custom parameters."""
         async def run_test():
             # Custom indicator doesn't require BOS
-            result = await self.custom_indicator.calculate(self.candles, self.fvg_data, self.doji_data, self.bos_data)
+            result = await self.custom_indicator.calculate(self.data)
             
             # We should still detect both blocks even without BOS
             self.assertTrue(result.has_demand_block)
@@ -289,9 +305,11 @@ class TestOrderBlockIndicator(unittest.TestCase):
                 ],
                 bearish_fvgs = self.fvg_data.bearish_fvgs
             )
+
+            self.data["fvg_data"] = modified_fvg_data
             
             # Test with custom indicator (max_detection_window = 3)
-            result = await self.custom_indicator.calculate(self.candles, modified_fvg_data, self.doji_data, self.bos_data)
+            result = await self.custom_indicator.calculate(self.data)
             
             # We should not detect a demand block because FVG is outside window
             self.assertFalse(result.has_demand_block)

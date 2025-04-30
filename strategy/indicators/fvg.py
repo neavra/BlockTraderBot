@@ -36,7 +36,7 @@ class FVGIndicator(Indicator):
             
         super().__init__(default_params)
     
-    async def calculate(self, candles: List[CandleDto]) -> FvgResultDto:
+    async def calculate(self, data: Dict[str,Any]) -> FvgResultDto:
         """
         Detect Fair Value Gaps in the provided candle data
         
@@ -50,6 +50,7 @@ class FVGIndicator(Indicator):
         """
         
         # Need at least 3 candles to detect FVGs
+        candles: List[CandleDto] = data.get("candles")
         if len(candles) < 3:
             logger.warning("Not enough candles to detect FVGs (minimum 3 required)")
             return FvgResultDto(

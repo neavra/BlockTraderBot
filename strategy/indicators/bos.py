@@ -2,6 +2,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 from .base import Indicator
 from strategy.domain.dto.bos_dto import StructureBreakDto, StructureBreakResultDto
+from strategy.domain.models.market_context import MarketContext
 from shared.domain.dto.candle_dto import CandleDto
 import logging
 
@@ -42,7 +43,7 @@ class StructureBreakIndicator(Indicator):
             
         super().__init__(default_params)
     
-    async def calculate(self, candles: List[CandleDto], market_context: Dict[str,Any]) -> StructureBreakResultDto:
+    async def calculate(self, data: Dict[str,Any]) -> StructureBreakResultDto:
         """
         Detect Breaking of Structure events in the provided data
         
@@ -54,6 +55,9 @@ class StructureBreakIndicator(Indicator):
         Returns:
             StructureBreakResultDto with detected structure breaks
         """
+        candles: List[CandleDto] = data.get("candles")
+        market_contexts = data.get("market_contexts")
+        market_context: MarketContext = market_contexts[0]
         
         # Need enough candles to analyze
         if len(candles) < 3:
@@ -61,13 +65,13 @@ class StructureBreakIndicator(Indicator):
             return self._get_empty_result()
         
         # Need market context with swing points to detect breaks
-        if not market_context:
+        if not market_context or not market_context.swing_high or not market_context.swing_low:
             logger.warning("No market context provided, cannot detect structure breaks")
             return self._get_empty_result()
         
         # Get recent swing points from market context
-        swing_high = market_context.get('swing_high')
-        swing_low = market_context.get('swing_low')
+        swing_high = market_context.swing_high.get("swing_high")
+        swing_low = market_context.swing_low.get("swing_low")
         
         # Check if swing points are available
         if not swing_high or not swing_low:

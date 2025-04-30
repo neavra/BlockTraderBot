@@ -90,6 +90,16 @@ class TestDojiCandleIndicator(unittest.TestCase):
                 is_closed=True
             )
         ]
+        data_dict = {
+            "candles": self.candles,
+            "symbol": "BTCUSDT",
+            "timeframe": "1h",
+            "exchange": "binance",
+            "current_price": 100,
+            "timestamp": datetime.now().isoformat()
+        }
+
+        self.data = data_dict
         
         # Convert CandleDto objects to dictionaries for testing
         # self.candle_dicts = [self._candle_to_dict(candle) for candle in self.candles]
@@ -140,7 +150,7 @@ class TestDojiCandleIndicator(unittest.TestCase):
         """Test doji detection with default parameters."""
         async def run_test():
             # Calculate with all candles
-            result = await self.indicator.calculate(self.candles)
+            result = await self.indicator.calculate(self.data)
             
             # There should be 2 dojis with default parameters (the first and last candles)
             self.assertEqual(len(result.dojis), 2)
@@ -170,7 +180,7 @@ class TestDojiCandleIndicator(unittest.TestCase):
         """Test doji detection with custom parameters."""
         async def run_test():
             # Calculate with all candles using custom parameters
-            result = await self.custom_indicator.calculate(self.candles)
+            result = await self.custom_indicator.calculate(self.data)
             
             # With more permissive parameters, we should detect more dojis
             self.assertTrue(len(result.dojis) >= 2)
@@ -209,9 +219,9 @@ class TestDojiCandleIndicator(unittest.TestCase):
             )
             
             test_candles = self.candles + [zero_range_candle]
-            
+            self.data["candles"] = test_candles
             # The indicator should handle this without errors
-            result = await self.indicator.calculate(test_candles)
+            result = await self.indicator.calculate(self.data)
             
             # Zero range candle should be skipped (not causing errors)
             self.assertEqual(len(result.dojis), 2)
@@ -241,8 +251,8 @@ class TestDojiCandleIndicator(unittest.TestCase):
         async def run_test():
             # Reverse the candle order to ensure sorting works
             reversed_candles = list(reversed(self.candles))
-            
-            result = await self.indicator.calculate(reversed_candles)
+            self.data["candles"] = reversed_candles
+            result = await self.indicator.calculate(self.data)
             
             # Check that dojis are sorted by index (descending)
             if len(result.dojis) >= 2:

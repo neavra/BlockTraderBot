@@ -36,7 +36,7 @@ class DojiCandleIndicator(Indicator):
             
         super().__init__(default_params)
     
-    async def calculate(self, candles: List[CandleDto]) -> DojiResultDto:
+    async def calculate(self, data: Dict[str,Any]) -> DojiResultDto:
         """
         Detect Doji candle patterns in the provided data
         
@@ -48,7 +48,7 @@ class DojiCandleIndicator(Indicator):
         Returns:
             DojiResultDto with detected doji patterns
         """
-        
+        candles: List[CandleDto] = data.get("candles")
         # Need enough candles to analyze
         if len(candles) < 3:
             logger.warning("Not enough candles to detect doji patterns (minimum 3 required)")

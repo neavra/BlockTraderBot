@@ -231,6 +231,17 @@ class TestFVGIndicator(unittest.TestCase):
                 is_closed=True
             )
         ]
+
+        data_dict = {
+            "candles": self.bullish_candles,
+            "symbol": "BTCUSDT",
+            "timeframe": "1h",
+            "exchange": "binance",
+            "current_price": 100,
+            "timestamp": datetime.now().isoformat()
+        }
+
+        self.data = data_dict
         
         # Convert CandleDto objects to dictionaries for testing
         # self.bullish_candle_dicts = [self._candle_to_dict(candle) for candle in self.bullish_candles]
@@ -263,12 +274,14 @@ class TestFVGIndicator(unittest.TestCase):
         """Test behavior with empty or insufficient candles."""
         async def run_test():
             # Test with empty candles
-            result = await self.indicator.calculate([])
+            self.data["candles"] = []
+            result = await self.indicator.calculate(self.data)
             self.assertEqual(len(result.bullish_fvgs), 0)
             self.assertEqual(len(result.bearish_fvgs), 0)
             
             # Test with insufficient candles (less than 3)
-            result = await self.indicator.calculate(self.bullish_candles[:2])
+            self.data["candles"] = self.bullish_candles[:2]
+            result = await self.indicator.calculate(self.data)
             self.assertEqual(len(result.bullish_fvgs), 0)
             self.assertEqual(len(result.bearish_fvgs), 0)
             
@@ -278,7 +291,8 @@ class TestFVGIndicator(unittest.TestCase):
         """Test detection of bullish Fair Value Gaps."""
         async def run_test():
             # Calculate with bullish FVG candles
-            result = await self.indicator.calculate(self.bullish_candles)
+            self.data["candles"] = self.bullish_candles
+            result = await self.indicator.calculate(self.data)
             
             # There should be 1 bullish FVG detected
             self.assertEqual(len(result.bullish_fvgs), 1)
@@ -303,8 +317,8 @@ class TestFVGIndicator(unittest.TestCase):
     def test_bearish_fvg_detection(self):
         """Test detection of bearish Fair Value Gaps."""
         async def run_test():
-            # Calculate with bearish FVG candles
-            result = await self.indicator.calculate(self.bearish_candles)
+            self.data["candles"] = self.bearish_candles
+            result = await self.indicator.calculate(self.data)
             
             # There should be 1 bearish FVG detected
             self.assertEqual(len(result.bullish_fvgs), 0)
@@ -331,7 +345,8 @@ class TestFVGIndicator(unittest.TestCase):
         """Test detection of filled Fair Value Gaps."""
         async def run_test():
             # Calculate with candles containing a filled FVG
-            result = await self.indicator.calculate(self.filled_fvg_candles)
+            self.data["candles"] = self.filled_fvg_candles
+            result = await self.indicator.calculate(self.data)
             
             # There should be 1 bullish FVG detected
             self.assertEqual(len(result.bullish_fvgs), 1)
@@ -346,14 +361,16 @@ class TestFVGIndicator(unittest.TestCase):
         """Test that gaps smaller than the threshold are ignored."""
         async def run_test():
             # Calculate with candles containing a small gap
-            result = await self.indicator.calculate(self.small_gap_candles)
+            self.data["candles"] = self.small_gap_candles
+            result = await self.indicator.calculate(self.data)
             
             # No FVGs should be detected with default parameters
             self.assertEqual(len(result.bullish_fvgs), 0)
             self.assertEqual(len(result.bearish_fvgs), 0)
             
             # With custom parameters (lower threshold), the gap should be detected
-            result = await self.custom_indicator.calculate(self.small_gap_candles)
+            self.data["candles"] = self.small_gap_candles
+            result = await self.indicator.calculate(self.data)
             
             # The custom indicator may detect the gap depending on exact values
             # Only assert something if FVGs are detected
