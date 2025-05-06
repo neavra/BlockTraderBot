@@ -2,6 +2,8 @@
 from typing import Dict, Any, List
 from strategy.indicators.base import Indicator
 import logging
+from strategy.domain.types.indicator_type_enum import IndicatorType
+
 
 logger = logging.getLogger(__name__)
 
@@ -91,5 +93,5 @@ class HiddenOrderBlockIndicator(Indicator):
             'candles': True,
             'lookback_period': 100,
             'timeframes': ['1h', '4h', '1d'],
-            'indicators': ['order_block', 'fvg']  # Dependencies on these indicators
+            'indicators': [IndicatorType.ORDER_BLOCK, IndicatorType.FVG]
         }

@@ -7,6 +7,7 @@ from shared.domain.dto.candle_dto import CandleDto
 from strategy.domain.dto.bos_dto import StructureBreakDto, StructureBreakResultDto
 from strategy.domain.dto.fvg_dto import FvgDto, FvgResultDto
 from strategy.domain.dto.doji_dto import DojiDto, DojiResultDto
+from strategy.domain.types.indicator_type_enum import IndicatorType
 
 logger = logging.getLogger(__name__)
 
@@ -436,5 +437,5 @@ class OrderBlockIndicator(Indicator):
             'candles': True,
             'lookback_period': self.params['lookback_period'],
             'timeframes': ['15m', '1h', '4h', '1d'],
-            'indicators': ['structure_break', 'fvg', 'doji_candle']
+            'indicators': [IndicatorType.STRUCTURE_BREAK, IndicatorType.FVG, IndicatorType.DOJI_CANDLE]
         }

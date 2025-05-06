@@ -14,6 +14,7 @@ from strategy.strategies.strategy_factory import StrategyFactory
 from strategy.indicators.indicator_factory import IndicatorFactory
 from strategy.context.context_engine import ContextEngine
 from data.database.db import Database
+from strategy.domain.types.indicator_type_enum import IndicatorType
 
 
 logger = logging.getLogger(__name__)
@@ -110,7 +111,7 @@ class StrategyService:
             # Initialize market structure with cache service
             self.context_engine = ContextEngine(
                 cache_service=self.cache_service,
-                database_service=Database(db_url=self.config["data"]["database"]["database_url"]),
+                database=Database(db_url=self.config["data"]["database"]["database_url"]),
                 config=market_context_params
             )
 
@@ -136,19 +137,20 @@ class StrategyService:
         indicator_configs = self.config.get('strategy', {}).get('indicators', {})
         
         # Create each indicator
-        for ind_name, ind_config in indicator_configs.items():
+        for ind_name_str, ind_config in indicator_configs.items():
             if not ind_config.get('enabled', True):
                 continue
                 
             try:
+                ind_enum = IndicatorType(ind_name_str)
                 indicator = indicator_factory.create_indicator(
-                    ind_name, 
+                    ind_enum, 
                     params=ind_config.get('params', {})
                 )
-                self.indicators[ind_name] = indicator
-                logger.info(f"Initialized indicator: {ind_name}")
+                self.indicators[ind_enum] = indicator
+                logger.info(f"Initialized indicator: {ind_name_str}")
             except Exception as e:
-                logger.error(f"Failed to initialize indicator {ind_name}: {e}")
+                logger.error(f"Failed to initialize indicator {ind_name_str}: {e}")
         
         logger.info(f"Initialized {len(self.indicators)} indicators")
     

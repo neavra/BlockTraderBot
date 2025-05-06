@@ -8,21 +8,22 @@ from strategy.indicators.composite_indicators.hidden_ob import HiddenOrderBlockI
 from strategy.indicators.fvg import FVGIndicator
 from strategy.indicators.doji_candle import DojiCandleIndicator
 from strategy.indicators.bos import StructureBreakIndicator
+from strategy.domain.types.indicator_type_enum import IndicatorType
 
 class IndicatorFactory:
     """Factory for creating indicator instances by name."""
     
     def __init__(self):
         """Initialize the factory with indicator mappings."""
-        self._indicators = {
-            'order_block': OrderBlockIndicator,
-            'fvg': FVGIndicator,
-            'structure_break': StructureBreakIndicator,
-            'doji_candle': DojiCandleIndicator,
-            'hidden_order_block': HiddenOrderBlockIndicator,
+        self._indicators: Dict[IndicatorType, Type[Indicator]] = {
+            IndicatorType.ORDER_BLOCK: OrderBlockIndicator,
+            IndicatorType.FVG: FVGIndicator,
+            IndicatorType.STRUCTURE_BREAK: StructureBreakIndicator,
+            IndicatorType.DOJI_CANDLE: DojiCandleIndicator,
+            IndicatorType.HIDDEN_ORDER_BLOCK: HiddenOrderBlockIndicator,
         }
     
-    def create_indicator(self, name: str, params: Dict[str, Any] = None) -> Indicator:
+    def create_indicator(self, name: IndicatorType, params: Dict[str, Any] = None) -> Indicator:
         """
         Create an indicator instance by name.
         
@@ -42,6 +43,6 @@ class IndicatorFactory:
         indicator_class = self._indicators[name]
         return indicator_class(params=params)
     
-    def register_indicator(self, name: str, indicator_class: Type[Indicator]):
+    def register_indicator(self, name: IndicatorType, indicator_class: Type[Indicator]):
         """Register a new indicator class."""
         self._indicators[name] = indicator_class
