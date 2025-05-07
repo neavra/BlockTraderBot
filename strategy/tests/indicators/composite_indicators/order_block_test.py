@@ -2,6 +2,7 @@ import unittest
 import asyncio
 from datetime import datetime, timezone
 from dataclasses import asdict
+from unittest.mock import MagicMock, AsyncMock
 
 # Import the OrderBlockIndicator class and dependencies
 from strategy.indicators.composite_indicators.order_block import OrderBlockIndicator
@@ -15,11 +16,17 @@ class TestOrderBlockIndicator(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures before each test method."""
+        self.mock_repository = MagicMock()
+        
+        # Set up the bulk_create_fvgs method to return a successful result
+        self.mock_repository.bulk_create_order_blocks = AsyncMock(return_value=[])
         # Create indicator with default parameters
-        self.indicator = OrderBlockIndicator()
+        self.indicator = OrderBlockIndicator(repository=self.mock_repository)
         
         # Create indicator with custom parameters
-        self.custom_indicator = OrderBlockIndicator(params={
+        self.custom_indicator = OrderBlockIndicator(
+            repository=self.mock_repository,
+            params={
             'max_body_to_range_ratio': 0.5,   # More permissive ratio
             'min_wick_to_body_ratio': 1.2,    # Less strict wick requirement
             'max_detection_window': 3,        # Shorter detection window

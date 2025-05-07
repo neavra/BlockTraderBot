@@ -2,6 +2,7 @@ import unittest
 import asyncio
 from datetime import datetime, timezone
 from dataclasses import asdict
+from unittest.mock import MagicMock, AsyncMock
 
 # Import the FVGIndicator class
 from strategy.indicators.fvg import FVGIndicator
@@ -12,14 +13,23 @@ class TestFVGIndicator(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures before each test method."""
-        # Create indicator with default parameters
-        self.indicator = FVGIndicator()
+        # Mock the FvgRepository
+        self.mock_repository = MagicMock()
         
-        # Create indicator with custom parameters
-        self.custom_indicator = FVGIndicator(params={
-            'min_gap_size': 0.1,       # Lower threshold for gap detection
-            'max_age_candles': 10      # Fewer candles to look back
-        })
+        # Set up the bulk_create_fvgs method to return a successful result
+        self.mock_repository.bulk_create_fvgs = AsyncMock(return_value=[])
+        
+        # Create indicator with default parameters and mocked repository
+        self.indicator = FVGIndicator(repository=self.mock_repository)
+        
+        # Create indicator with custom parameters and mocked repository
+        self.custom_indicator = FVGIndicator(
+            repository=self.mock_repository,
+            params={
+                'min_gap_size': 0.1,       # Lower threshold for gap detection
+                'max_age_candles': 10      # Fewer candles to look back
+            }
+        )
         
         # Create test candles for bullish FVG scenario
         self.bullish_candles = [

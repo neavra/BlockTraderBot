@@ -2,6 +2,7 @@ import unittest
 import asyncio
 from datetime import datetime, timezone
 from dataclasses import asdict
+from unittest.mock import MagicMock, AsyncMock
 
 # Import the DojiCandleIndicator class
 from strategy.indicators.doji_candle import DojiCandleIndicator
@@ -12,11 +13,18 @@ class TestDojiCandleIndicator(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures before each test method."""
+        # Mock the FvgRepository
+        self.mock_repository = MagicMock()
+        
+        # Set up the bulk_create_dojis method to return a successful result
+        self.mock_repository.bulk_create_dojis = AsyncMock(return_value=[])
         # Create indicator with default parameters
-        self.indicator = DojiCandleIndicator()
+        self.indicator = DojiCandleIndicator(repository=self.mock_repository)
         
         # Create indicator with custom parameters
-        self.custom_indicator = DojiCandleIndicator(params={
+        self.custom_indicator = DojiCandleIndicator(
+            repository=self.mock_repository,
+            params={
             'max_body_to_range_ratio': 0.2,     # More permissive ratio
             'min_range_to_price_ratio': 0.003,  # Lower minimum range
             'lookback_period': 10               # Shorter lookback

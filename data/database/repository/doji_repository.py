@@ -304,35 +304,35 @@ class DojiRepository(BaseRepository[DojiModel]):
             self.logger.error(f"Error creating Doji: {str(e)}")
             return None
 
-        async def bulk_create_dojis(self, doji_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-            """
-            Create multiple Doji records in a single transaction.
+    async def bulk_create_dojis(self, doji_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Create multiple Doji records in a single transaction.
+        
+        Args:
+            doji_list: List of dictionaries containing Doji data
             
-            Args:
-                doji_list: List of dictionaries containing Doji data
+        Returns:
+            List of created Dojis as dictionaries
+        """
+        created_items = []
+        try:
+            # Convert dictionaries to models
+            doji_models = [DojiModel.from_dict(data) for data in doji_list]
+            
+            # Add all to session
+            self.session.add_all(doji_models)
+            self.session.commit()
+            
+            # Refresh to get updated values
+            for model in doji_models:
+                self.session.refresh(model)
+                created_items.append(model.to_dict())
                 
-            Returns:
-                List of created Dojis as dictionaries
-            """
-            created_items = []
-            try:
-                # Convert dictionaries to models
-                doji_models = [DojiModel.from_dict(data) for data in doji_list]
-                
-                # Add all to session
-                self.session.add_all(doji_models)
-                self.session.commit()
-                
-                # Refresh to get updated values
-                for model in doji_models:
-                    self.session.refresh(model)
-                    created_items.append(model.to_dict())
-                    
-                return created_items
-            except SQLAlchemyError as e:
-                self.session.rollback()
-                self.logger.error(f"Error bulk creating Doji records: {str(e)}")
-                return []
+            return created_items
+        except SQLAlchemyError as e:
+            self.session.rollback()
+            self.logger.error(f"Error bulk creating Doji records: {str(e)}")
+            return []
     
     def _to_domain(self, db_obj: DojiModel) -> Dict[str, Any]:
         """

@@ -2,6 +2,7 @@ import unittest
 import asyncio
 from datetime import datetime, timezone
 from typing import Dict, Any, List
+from unittest.mock import MagicMock, AsyncMock
 
 # Import the StructureBreakIndicator class
 from strategy.indicators.bos import StructureBreakIndicator
@@ -14,11 +15,18 @@ class TestStructureBreakIndicator(unittest.TestCase):
     
     def setUp(self):
         """Set up test fixtures before each test method."""
+        # Mock the FvgRepository
+        self.mock_repository = MagicMock()
+        
+        # Set up the bulk_create_bos method to return a successful result
+        self.mock_repository.bulk_create_bos = AsyncMock(return_value=[])
         # Create indicator with default parameters
-        self.indicator = StructureBreakIndicator()
+        self.indicator = StructureBreakIndicator(repository=self.mock_repository)
         
         # Create indicator with custom parameters
-        self.custom_indicator = StructureBreakIndicator(params={
+        self.custom_indicator = StructureBreakIndicator(
+            repository=self.mock_repository,
+            params={
             'lookback_period': 5,           # Smaller lookback
             'confirmation_candles': 2,      # More confirmations required
             'min_break_percentage': 0.001   # Higher threshold (0.1%)
