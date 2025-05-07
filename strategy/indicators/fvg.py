@@ -31,7 +31,7 @@ class FVGIndicator(Indicator):
         """
 
         self.repository = repository
-        
+
         default_params = {
             'min_gap_size': 0.2,  # Minimum gap size as percentage
         }
@@ -41,21 +41,29 @@ class FVGIndicator(Indicator):
             
         super().__init__(default_params)
     
-    async def calculate(self, data: Dict[str,Any]) -> FvgResultDto:
+    async def calculate(self, data: Dict[str, Any]) -> FvgResultDto:
         """
-        Detect Fair Value Gaps in the provided candle data
+        Detect Fair Value Gaps in the provided candle data and save them to the database.
         
         Args:
             data: Dictionary containing:
                 - candles: List of OHLCV candles with at least 'high', 'low', 'open', 'close', and optional 'timestamp'
+                - symbol: Trading symbol
+                - timeframe: Timeframe
+                - exchange: Exchange name
                 - current_price: Current market price (optional)
-                
+                    
         Returns:
             FvgResultDto with detected bullish and bearish FVGs
         """
         
-        # Need at least 3 candles to detect FVGs
+        # Extract market data information
         candles: List[CandleDto] = data.get("candles")
+        symbol = data.get("symbol")
+        timeframe = data.get("timeframe")
+        exchange = data.get("exchange", "default")
+        
+        # Need at least 3 candles to detect FVGs
         if len(candles) < 3:
             logger.warning("Not enough candles to detect FVGs (minimum 3 required)")
             return FvgResultDto(
@@ -112,7 +120,7 @@ class FVGIndicator(Indicator):
             # Detect bearish FVG (gap down)
             elif candle_current.high < candle_before_previous.low:
                 # Calculate gap size
-                gap_size = candle_before_previous.low - candle_current.low
+                gap_size = candle_before_previous.low - candle_current.high
                 
                 # Calculate gap size as percentage of price
                 gap_pct = gap_size / candle_before_previous.low
@@ -140,6 +148,46 @@ class FVGIndicator(Indicator):
         # Filter out FVGs that have been filled by subsequent price action
         self._filter_filled_by_price_action(candles, bullish_fvgs, bearish_fvgs)
         
+        # Save detected FVGs to the database
+        try:
+            # Prepare FVGs for database insertion
+            fvgs_data = []
+            
+            # Process bullish FVGs
+            for fvg in bullish_fvgs + bearish_fvgs:
+                # Convert FVG to database format
+                fvg_data = {
+                    "exchange": exchange,
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "type": fvg.type,
+                    "top": float(fvg.top),
+                    "bottom": float(fvg.bottom),
+                    "size": float(fvg.size),
+                    "size_percent": float(fvg.size_percent),
+                    "filled": fvg.filled,
+                    "candle_index": fvg.candle_index,
+                    "timestamp": fvg.timestamp if isinstance(fvg.timestamp, datetime) else datetime.fromisoformat(fvg.timestamp),
+                    
+                    # Store the JSON-serializable version of the candle data
+                    "candle_data": self._serialize_candle(fvg.candle),
+                    
+                    # Required fields from your model
+                    "indicator_id": 2,  # Assuming 2 is the ID for FVG indicator in the indicators table
+                    "created_at": datetime.now(timezone.utc),
+                    "updated_at": datetime.now(timezone.utc)
+                }
+                
+                fvgs_data.append(fvg_data)
+            
+            # Bulk insert the FVGs
+            if fvgs_data:
+                created_fvgs = await self.repository.bulk_create_fvgs(fvgs_data)
+                logger.info(f"Saved {len(created_fvgs)} FVGs to database")
+                
+        except Exception as e:
+            logger.error(f"Error saving FVGs to database: {str(e)}")
+        
         # Create and return FVG result DTO
         return FvgResultDto(
             timestamp=datetime.now(timezone.utc),
@@ -147,6 +195,40 @@ class FVGIndicator(Indicator):
             bullish_fvgs=bullish_fvgs,
             bearish_fvgs=bearish_fvgs
         )
+
+    def _serialize_candle(self, candle: CandleDto) -> Dict[str, Any]:
+        """
+        Convert a CandleDto to a JSON-serializable dictionary.
+        
+        Args:
+            candle: Candle DTO to serialize
+            
+        Returns:
+            JSON-serializable dictionary
+        """
+        if candle is None:
+            return None
+        
+        result = {
+            "symbol": candle.symbol,
+            "exchange": candle.exchange,
+            "timeframe": candle.timeframe,
+            "open": float(candle.open),
+            "high": float(candle.high),
+            "low": float(candle.low),
+            "close": float(candle.close),
+            "volume": float(candle.volume),
+            "is_closed": candle.is_closed
+        }
+        
+        # Handle timestamp (could be datetime or string)
+        if hasattr(candle, 'timestamp'):
+            if isinstance(candle.timestamp, datetime):
+                result["timestamp"] = candle.timestamp.isoformat()
+            else:
+                result["timestamp"] = candle.timestamp
+        
+        return result
     
     def _filter_filled_by_price_action(self, candles: List[CandleDto], 
                                     bullish_fvgs: List[FvgDto], 

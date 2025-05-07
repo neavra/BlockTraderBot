@@ -28,7 +28,7 @@ class DojiCandleIndicator(Indicator):
                 - lookback_period: Number of candles to analyze
         """
         self.repository = repository
-        
+
         default_params = {
             'max_body_to_range_ratio': 0.1,     # Maximum body/range ratio to qualify as doji
             'min_range_to_price_ratio': 0.005,  # Minimum range/price ratio (filters out tiny dojis)
@@ -40,19 +40,28 @@ class DojiCandleIndicator(Indicator):
             
         super().__init__(default_params)
     
-    async def calculate(self, data: Dict[str,Any]) -> DojiResultDto:
+    async def calculate(self, data: Dict[str, Any]) -> DojiResultDto:
         """
-        Detect Doji candle patterns in the provided data
+        Detect Doji candle patterns in the provided data and save them to the database.
         
         Args:
             data: Dictionary containing:
                 - candles: List of OHLCV candles
+                - symbol: Trading symbol
+                - timeframe: Timeframe
+                - exchange: Exchange name
                 - current_price: Current market price (optional)
                 
         Returns:
             DojiResultDto with detected doji patterns
         """
         candles: List[CandleDto] = data.get("candles")
+        
+        # Extract market data information
+        symbol = data.get("symbol")
+        timeframe = data.get("timeframe")
+        exchange = data.get("exchange", "default")
+        
         # Need enough candles to analyze
         if len(candles) < 3:
             logger.warning("Not enough candles to detect doji patterns (minimum 3 required)")
@@ -112,12 +121,83 @@ class DojiCandleIndicator(Indicator):
         # Sort dojis by index (most recent first)
         dojis.sort(key=lambda x: x.index, reverse=True)
         
+        # Save detected doji patterns to the database
+        try:
+            if dojis:
+                # Prepare the database records
+                doji_records = []
+                for doji in dojis:
+                    # Create the database record
+                    doji_data = {
+                        "exchange": exchange,
+                        "symbol": symbol,
+                        "timeframe": timeframe,
+                        "body_to_range_ratio": float(doji.body_to_range_ratio),
+                        "total_wick_size": float(doji.total_wick_size),
+                        "strength": float(doji.strength),
+                        "candle_index": doji.index,
+                        "timestamp": doji.timestamp if isinstance(doji.timestamp, datetime) else 
+                                    datetime.fromisoformat(doji.timestamp.replace('Z', '+00:00')),
+                        "candle_data": self._serialize_candle(doji.candle),
+                        "analyzed_at": datetime.now(timezone.utc),
+                        
+                        # Add indicator ID (use the correct enum value in your implementation)
+                        "indicator_id": 4,  # Assuming 4 is the ID for DOJI_CANDLE in your indicator registry
+                        
+                        # Add timestamps
+                        "created_at": datetime.now(timezone.utc),
+                        "updated_at": datetime.now(timezone.utc)
+                    }
+                    
+                    doji_records.append(doji_data)
+                
+                # Bulk create the records
+                if doji_records:
+                    created_records = await self.repository.bulk_create_dojis(doji_records)
+                    logger.info(f"Saved {len(created_records)} doji patterns to database")
+        except Exception as e:
+            logger.error(f"Error saving doji patterns to database: {e}")
+        
         # Create and return the result DTO
         return DojiResultDto(
             timestamp=datetime.now(timezone.utc),
             indicator_name="Doji",
             dojis=dojis
         )
+
+    def _serialize_candle(self, candle: CandleDto) -> Dict[str, Any]:
+        """
+        Convert a CandleDto to a JSON-serializable dictionary.
+        
+        Args:
+            candle: Candle DTO to serialize
+            
+        Returns:
+            JSON-serializable dictionary
+        """
+        if candle is None:
+            return None
+        
+        result = {
+            "symbol": candle.symbol,
+            "exchange": candle.exchange,
+            "timeframe": candle.timeframe,
+            "open": float(candle.open),
+            "high": float(candle.high),
+            "low": float(candle.low),
+            "close": float(candle.close),
+            "volume": float(candle.volume),
+            "is_closed": candle.is_closed
+        }
+        
+        # Handle timestamp (could be datetime or string)
+        if hasattr(candle, 'timestamp'):
+            if isinstance(candle.timestamp, datetime):
+                result["timestamp"] = candle.timestamp.isoformat()
+            else:
+                result["timestamp"] = candle.timestamp
+        
+        return result
     
     def get_requirements(self) -> Dict[str, Any]:
         """

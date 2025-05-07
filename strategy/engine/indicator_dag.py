@@ -122,6 +122,9 @@ class IndicatorDAG:
         Build a properly formatted data dictionary for indicator calculations.
 
         Args:
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "exchange": exchange,
             candle_data: List of candle data objects
             market_contexts: List of market context objects for multiple timeframes
 

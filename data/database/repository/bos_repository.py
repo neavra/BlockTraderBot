@@ -337,6 +337,64 @@ class BosRepository(BaseRepository[BosModel]):
                 },
                 "total_count": 0
             }
+        
+    async def create_bos(self, bos_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Create a new Breaking of Structure (BOS) record in the database.
+        
+        Args:
+            bos_data: Dictionary containing BOS data
+            
+        Returns:
+            Dictionary representation of the created BOS, or None if creation failed
+        """
+        try:
+            # Convert dictionary to model
+            bos_model = BosModel.from_dict(bos_data)
+            
+            # Add to session
+            self.session.add(bos_model)
+            self.session.commit()
+            
+            # Refresh to get updated values (like auto-generated ID)
+            self.session.refresh(bos_model)
+            
+            # Convert back to dictionary and return
+            return bos_model.to_dict()
+        except SQLAlchemyError as e:
+            self.session.rollback()
+            self.logger.error(f"Error creating BOS: {str(e)}")
+            return None
+
+    async def bulk_create_bos(self, bos_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Create multiple BOS records in a single transaction.
+        
+        Args:
+            bos_list: List of dictionaries containing BOS data
+            
+        Returns:
+            List of created BOS as dictionaries
+        """
+        created_items = []
+        try:
+            # Convert dictionaries to models
+            bos_models = [BosModel.from_dict(data) for data in bos_list]
+            
+            # Add all to session
+            self.session.add_all(bos_models)
+            self.session.commit()
+            
+            # Refresh to get updated values
+            for model in bos_models:
+                self.session.refresh(model)
+                created_items.append(model.to_dict())
+                
+            return created_items
+        except SQLAlchemyError as e:
+            self.session.rollback()
+            self.logger.error(f"Error bulk creating BOS records: {str(e)}")
+            return []
     
     def _to_domain(self, db_obj: BosModel) -> Dict[str, Any]:
         """

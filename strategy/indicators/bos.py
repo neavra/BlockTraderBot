@@ -35,7 +35,7 @@ class StructureBreakIndicator(Indicator):
                 - min_break_percentage: Minimum percentage break beyond structure (default: 0.05%)
         """
         self.repository = repository
-        
+
         default_params = {
             'lookback_period': 10,         # Number of candles to look back
             'confirmation_candles': 1,      # Number of candles to confirm the break
@@ -48,20 +48,34 @@ class StructureBreakIndicator(Indicator):
             
         super().__init__(default_params)
     
-    async def calculate(self, data: Dict[str,Any]) -> StructureBreakResultDto:
+    async def calculate(self, data: Dict[str, Any]) -> StructureBreakResultDto:
         """
-        Detect Breaking of Structure events in the provided data
+        Detect Breaking of Structure events in the provided data and save them to the database.
         
         Args:
             data: Dictionary containing:
                 - candles: List of OHLCV candles
-                - market_context: Market context object with swing high/low information
+                - market_contexts: Market context objects with swing high/low information
+                - symbol: Trading symbol
+                - timeframe: Timeframe
+                - exchange: Exchange name
                 
         Returns:
             StructureBreakResultDto with detected structure breaks
         """
         candles: List[CandleDto] = data.get("candles")
         market_contexts = data.get("market_contexts")
+        
+        # Extract market data information
+        symbol = data.get("symbol")
+        timeframe = data.get("timeframe")
+        exchange = data.get("exchange", "default")
+        
+        # Check if we have at least one market context
+        if not market_contexts or len(market_contexts) == 0:
+            logger.warning("No market contexts provided, cannot detect structure breaks")
+            return self._get_empty_result()
+            
         market_context: MarketContext = market_contexts[0]
         
         # Need enough candles to analyze
@@ -75,8 +89,8 @@ class StructureBreakIndicator(Indicator):
             return self._get_empty_result()
         
         # Get recent swing points from market context
-        swing_high = market_context.swing_high.get("swing_high")
-        swing_low = market_context.swing_low.get("swing_low")
+        swing_high = market_context.swing_high
+        swing_low = market_context.swing_low
         
         # Check if swing points are available
         if not swing_high or not swing_low:
@@ -121,7 +135,8 @@ class StructureBreakIndicator(Indicator):
                         break_percentage=(candle.high - swing_high_price) / swing_high_price,
                         swing_reference=swing_high_price,
                         candle=candle,
-                        timestamp=timestamp
+                        timestamp=timestamp,
+                        direction="bullish"  # Add direction explicitly
                     ))
             
             # Lower Low detection (bearish)
@@ -135,7 +150,8 @@ class StructureBreakIndicator(Indicator):
                         break_percentage=(swing_low_price - candle.low) / swing_low_price,
                         swing_reference=swing_low_price,
                         candle=candle,
-                        timestamp=timestamp
+                        timestamp=timestamp,
+                        direction="bearish"  # Add direction explicitly
                     ))
             
             # Higher Low detection (bullish)
@@ -149,7 +165,8 @@ class StructureBreakIndicator(Indicator):
                     break_percentage=(candle.low - swing_low_price) / swing_low_price,
                     swing_reference=swing_low_price,
                     candle=candle,
-                    timestamp=timestamp
+                    timestamp=timestamp,
+                    direction="bullish"  # Add direction explicitly
                 ))
             
             # Lower High detection (bearish)
@@ -162,12 +179,55 @@ class StructureBreakIndicator(Indicator):
                     break_percentage=(swing_high_price - candle.high) / swing_high_price,
                     swing_reference=swing_high_price,
                     candle=candle,
-                    timestamp=timestamp
+                    timestamp=timestamp,
+                    direction="bearish"  # Add direction explicitly
                 ))
         
         # Sort each list by index (most recent first)
         bullish_breaks.sort(key=lambda x: x.index, reverse=True)
         bearish_breaks.sort(key=lambda x: x.index, reverse=True)
+        
+        # Save the detected structure breaks to the database
+        try:
+            all_breaks = bullish_breaks + bearish_breaks
+            if all_breaks:
+                # Prepare the database records
+                bos_records = []
+                for bos in all_breaks:
+                    # Create the database record
+                    bos_data = {
+                        "exchange": exchange,
+                        "symbol": symbol,
+                        "timeframe": timeframe,
+                        "break_type": bos.break_type,
+                        "direction": bos.direction,
+                        "break_value": float(bos.break_value),
+                        "break_percentage": float(bos.break_percentage) * 100,  # Convert to percentage
+                        "swing_reference": float(bos.swing_reference),
+                        "confirmed": True,  # We've already confirmed it
+                        "confirmation_candles": self.params['confirmation_candles'],
+                        "candle_index": bos.index,
+                        "timestamp": bos.timestamp if isinstance(bos.timestamp, datetime) else 
+                                    datetime.fromisoformat(bos.timestamp.replace('Z', '+00:00')),
+                        "candle_data": self._serialize_candle(bos.candle),
+                        "strength": 0.8,  # Default strength value
+                        
+                        # Add indicator ID (use the correct enum value in your implementation)
+                        "indicator_id": 3,  # Assuming 3 is the ID for STRUCTURE_BREAK in your indicator registry
+                        
+                        # Add timestamps
+                        "created_at": datetime.now(timezone.utc),
+                        "updated_at": datetime.now(timezone.utc)
+                    }
+                    
+                    bos_records.append(bos_data)
+                
+                # Bulk create the records
+                if bos_records:
+                    created_records = await self.repository.bulk_create_bos(bos_records)
+                    logger.info(f"Saved {len(created_records)} structure breaks to database")
+        except Exception as e:
+            logger.error(f"Error saving structure breaks to database: {e}")
         
         # Create and return result DTO
         return StructureBreakResultDto(
@@ -176,6 +236,40 @@ class StructureBreakIndicator(Indicator):
             bullish_breaks=bullish_breaks,
             bearish_breaks=bearish_breaks
         )
+
+    def _serialize_candle(self, candle: CandleDto) -> Dict[str, Any]:
+        """
+        Convert a CandleDto to a JSON-serializable dictionary.
+        
+        Args:
+            candle: Candle DTO to serialize
+            
+        Returns:
+            JSON-serializable dictionary
+        """
+        if candle is None:
+            return None
+        
+        result = {
+            "symbol": candle.symbol,
+            "exchange": candle.exchange,
+            "timeframe": candle.timeframe,
+            "open": float(candle.open),
+            "high": float(candle.high),
+            "low": float(candle.low),
+            "close": float(candle.close),
+            "volume": float(candle.volume),
+            "is_closed": candle.is_closed
+        }
+        
+        # Handle timestamp (could be datetime or string)
+        if hasattr(candle, 'timestamp'):
+            if isinstance(candle.timestamp, datetime):
+                result["timestamp"] = candle.timestamp.isoformat()
+            else:
+                result["timestamp"] = candle.timestamp
+        
+        return result
     
     def _is_break_confirmed(self, candles: List[CandleDto], break_idx: int, 
                             price_type: str, reference_price: float) -> bool:

@@ -317,6 +317,64 @@ class FvgRepository(BaseRepository[FvgModel]):
                 "largest_gap": 0.0,
                 "total_count": 0
             }
+        
+    async def create_fvg(self, fvg_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Create a new FVG record in the database.
+        
+        Args:
+            fvg_data: Dictionary containing FVG data
+            
+        Returns:
+            Dictionary representation of the created FVG, or None if creation failed
+        """
+        try:
+            # Convert dictionary to model
+            fvg_model = FvgModel.from_dict(fvg_data)
+            
+            # Add to session
+            self.session.add(fvg_model)
+            self.session.commit()
+            
+            # Refresh to get updated values (like auto-generated ID)
+            self.session.refresh(fvg_model)
+            
+            # Convert back to dictionary and return
+            return fvg_model.to_dict()
+        except SQLAlchemyError as e:
+            self.session.rollback()
+            self.logger.error(f"Error creating FVG: {str(e)}")
+            return None
+
+    async def bulk_create_fvgs(self, fvgs_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Create multiple FVGs in a single transaction.
+        
+        Args:
+            fvgs_data: List of dictionaries containing FVG data
+            
+        Returns:
+            List of created FVGs as dictionaries
+        """
+        created_fvgs = []
+        try:
+            # Convert dictionaries to models
+            fvg_models = [FvgModel.from_dict(data) for data in fvgs_data]
+            
+            # Add all to session
+            self.session.add_all(fvg_models)
+            self.session.commit()
+            
+            # Refresh to get updated values
+            for model in fvg_models:
+                self.session.refresh(model)
+                created_fvgs.append(model.to_dict())
+                
+            return created_fvgs
+        except SQLAlchemyError as e:
+            self.session.rollback()
+            self.logger.error(f"Error bulk creating FVGs: {str(e)}")
+            return []
     
     def _to_domain(self, db_obj: FvgModel) -> Dict[str, Any]:
         """

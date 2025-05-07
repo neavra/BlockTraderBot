@@ -275,6 +275,64 @@ class DojiRepository(BaseRepository[DojiModel]):
                     'weak': 0
                 }
             }
+        
+    async def create_doji(self, doji_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Create a new Doji candle pattern record in the database.
+        
+        Args:
+            doji_data: Dictionary containing Doji data
+            
+        Returns:
+            Dictionary representation of the created Doji, or None if creation failed
+        """
+        try:
+            # Convert dictionary to model
+            doji_model = DojiModel.from_dict(doji_data)
+            
+            # Add to session
+            self.session.add(doji_model)
+            self.session.commit()
+            
+            # Refresh to get updated values (like auto-generated ID)
+            self.session.refresh(doji_model)
+            
+            # Convert back to dictionary and return
+            return doji_model.to_dict()
+        except SQLAlchemyError as e:
+            self.session.rollback()
+            self.logger.error(f"Error creating Doji: {str(e)}")
+            return None
+
+        async def bulk_create_dojis(self, doji_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+            """
+            Create multiple Doji records in a single transaction.
+            
+            Args:
+                doji_list: List of dictionaries containing Doji data
+                
+            Returns:
+                List of created Dojis as dictionaries
+            """
+            created_items = []
+            try:
+                # Convert dictionaries to models
+                doji_models = [DojiModel.from_dict(data) for data in doji_list]
+                
+                # Add all to session
+                self.session.add_all(doji_models)
+                self.session.commit()
+                
+                # Refresh to get updated values
+                for model in doji_models:
+                    self.session.refresh(model)
+                    created_items.append(model.to_dict())
+                    
+                return created_items
+            except SQLAlchemyError as e:
+                self.session.rollback()
+                self.logger.error(f"Error bulk creating Doji records: {str(e)}")
+                return []
     
     def _to_domain(self, db_obj: DojiModel) -> Dict[str, Any]:
         """
