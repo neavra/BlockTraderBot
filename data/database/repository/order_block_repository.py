@@ -322,6 +322,104 @@ class OrderBlockRepository(BaseRepository[OrderBlockModel]):
                 "avg_strength": 0.0,
                 "total_count": 0
             }
+        
+    async def create_order_block(self, order_block_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Create a new order block record in the database.
+        
+        Args:
+            order_block_data: Dictionary containing order block data
+            
+        Returns:
+            Dictionary representation of the created order block, or None if creation failed
+        """
+        try:
+            # Convert dictionary to model
+            order_block_model = OrderBlockModel.from_dict(order_block_data)
+            
+            # Add to session
+            self.session.add(order_block_model)
+            self.session.commit()
+            
+            # Refresh to get updated values (like auto-generated ID)
+            self.session.refresh(order_block_model)
+            
+            # Convert back to dictionary and return
+            return order_block_model.to_dict()
+        except SQLAlchemyError as e:
+            self.session.rollback()
+            self.logger.error(f"Error creating order block: {str(e)}")
+            return None
+
+    async def bulk_create_order_blocks(self, order_blocks_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Create multiple order blocks in a single transaction.
+        
+        Args:
+            order_blocks_data: List of dictionaries containing order block data
+            
+        Returns:
+            List of created order blocks as dictionaries
+        """
+        created_blocks = []
+        try:
+            # Convert dictionaries to models
+            order_block_models = [OrderBlockModel.from_dict(data) for data in order_blocks_data]
+            
+            # Add all to session
+            self.session.add_all(order_block_models)
+            self.session.commit()
+            
+            # Refresh to get updated values
+            for model in order_block_models:
+                self.session.refresh(model)
+                created_blocks.append(model.to_dict())
+                
+            return created_blocks
+        except SQLAlchemyError as e:
+            self.session.rollback()
+            self.logger.error(f"Error bulk creating order blocks: {str(e)}")
+            return []
+
+    async def update_order_block(self, block_id: int, update_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Update an existing order block.
+        
+        Args:
+            block_id: ID of the order block to update
+            update_data: Dictionary containing fields to update
+            
+        Returns:
+            Updated order block as dictionary, or None if update failed
+        """
+        try:
+            # Find the order block
+            order_block = self.session.query(self.model_class).filter(
+                self.model_class.id == block_id
+            ).first()
+            
+            if not order_block:
+                self.logger.warning(f"Order block with ID {block_id} not found")
+                return None
+            
+            # Update fields
+            for key, value in update_data.items():
+                if hasattr(order_block, key):
+                    setattr(order_block, key, value)
+            
+            # Set updated_at timestamp
+            order_block.updated_at = datetime.now(timezone.utc)
+            
+            # Commit changes
+            self.session.commit()
+            self.session.refresh(order_block)
+            
+            # Convert to dictionary and return
+            return order_block.to_dict()
+        except SQLAlchemyError as e:
+            self.session.rollback()
+            self.logger.error(f"Error updating order block with ID {block_id}: {str(e)}")
+            return None
     
     def _to_domain(self, db_obj: OrderBlockModel) -> Dict[str, Any]:
         """

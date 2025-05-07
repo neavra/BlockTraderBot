@@ -46,7 +46,7 @@ class OrderBlockIndicator(Indicator):
         """
 
         self.repository = repository
-        
+
         default_params = {
             'max_body_to_range_ratio': 0.4,   # Maximum ratio of body to total range
             'min_wick_to_body_ratio': 1.5,    # Minimum ratio of wicks to body
@@ -62,16 +62,17 @@ class OrderBlockIndicator(Indicator):
             
         super().__init__(default_params)
     
-    async def calculate(self, data: Dict[str,Any]) -> OrderBlockResultDto:
+    async def calculate(self, data: Dict[str, Any]) -> OrderBlockResultDto:
         """
         Detect order blocks in the provided candle data by combining insights from
-        doji candles, FVG, and BOS indicators.
+        doji candles, FVG, and BOS indicators, and save them to the database.
         
         Args:
             data: Dictionary containing:
                 - candles: List of OHLCV candles
                 - symbol: Trading symbol
                 - timeframe: Timeframe
+                - exchange: Exchange name
                 - fvg_data: FVG indicator results (from FVGIndicator)
                 - doji_data: Doji indicator results (from DojiCandleIndicator)
                 - bos_data: BOS indicator results (from StructureBreakIndicator)
@@ -79,11 +80,15 @@ class OrderBlockIndicator(Indicator):
         Returns:
             OrderBlockResultDto with detected order blocks
         """
-
         candles: List[CandleDto] = data.get("candles")
         doji_data: DojiResultDto = data.get("doji_candle_data")
         fvg_data: FvgResultDto = data.get("fvg_data")
         bos_data: StructureBreakResultDto = data.get("structure_break_data")
+        
+        # Extract market data information
+        symbol = data.get("symbol")
+        timeframe = data.get("timeframe")
+        exchange = data.get("exchange", "default")
         
         # Need enough candles to detect order blocks
         if len(candles) < 5:
@@ -95,6 +100,7 @@ class OrderBlockIndicator(Indicator):
             logger.warning("No doji data provided, order blocks require doji candles")
             return self._get_empty_result()
         doji_candles = doji_data.dojis
+        
         # Get FVG data
         if not fvg_data:
             logger.warning("No fvg data provided, order blocks require fvg candles")
@@ -118,6 +124,52 @@ class OrderBlockIndicator(Indicator):
         # Sort blocks by index (most recent first)
         demand_blocks.sort(key=lambda x: x.index, reverse=True)
         supply_blocks.sort(key=lambda x: x.index, reverse=True)
+        
+        # Save detected order blocks to the database
+        try:
+            # Prepare order blocks for database insertion
+            order_blocks_data = []
+            
+            for block in demand_blocks + supply_blocks:
+                # Skip blocks that might already exist in the database
+                # You might want to add more sophisticated deduplication logic
+                
+                # Convert block to database format
+                block_data = {
+                    "exchange": exchange,
+                    "symbol": symbol,
+                    "timeframe": timeframe,
+                    "type": block.type,
+                    "price_high": float(block.price_high),
+                    "price_low": float(block.price_low),
+                    "is_doji": block.is_doji,
+                    "candle_index": block.index,
+                    "timestamp": block.timestamp if isinstance(block.timestamp, datetime) else datetime.fromisoformat(block.timestamp),
+                    "status": block.status,
+                    "touched": block.touched,
+                    "mitigation_percentage": float(block.mitigation_percentage),
+                    
+                    # Store the JSON-serializable versions of related data
+                    "candle_data": self._serialize_candle(block.candle),
+                    "doji_data": self._serialize_dto(block.doji_data),
+                    "related_fvg": self._serialize_dto(block.related_fvg),
+                    "bos_data": self._serialize_dto(block.bos_data),
+                    
+                    # Required fields from your model
+                    "indicator_id": IndicatorType.ORDER_BLOCK.indicator_id,
+                    "created_at": datetime.now(timezone.utc),
+                    "updated_at": datetime.now(timezone.utc)
+                }
+                
+                order_blocks_data.append(block_data)
+            
+            # Bulk insert the order blocks
+            if order_blocks_data:
+                created_blocks = await self.repository.bulk_create_order_blocks(order_blocks_data)
+                logger.info(f"Saved {len(created_blocks)} order blocks to database")
+                
+        except Exception as e:
+            logger.error(f"Error saving order blocks to database: {str(e)}")
         
         # Create and return the result DTO
         return OrderBlockResultDto(
@@ -422,6 +474,72 @@ class OrderBlockIndicator(Indicator):
         
         return updated_blocks, remaining_active_blocks
     
+    def _serialize_candle(self, candle: CandleDto) -> Dict[str, Any]:
+        """
+        Convert a CandleDto to a JSON-serializable dictionary.
+        
+        Args:
+            candle: Candle DTO to serialize
+            
+        Returns:
+            JSON-serializable dictionary
+        """
+        if candle is None:
+            return None
+        
+        result = {
+            "symbol": candle.symbol,
+            "exchange": candle.exchange,
+            "timeframe": candle.timeframe,
+            "open": float(candle.open),
+            "high": float(candle.high),
+            "low": float(candle.low),
+            "close": float(candle.close),
+            "volume": float(candle.volume),
+            "is_closed": candle.is_closed
+        }
+        
+        # Handle timestamp (could be datetime or string)
+        if hasattr(candle, 'timestamp'):
+            if isinstance(candle.timestamp, datetime):
+                result["timestamp"] = candle.timestamp.isoformat()
+            else:
+                result["timestamp"] = candle.timestamp
+        
+        return result
+
+    def _serialize_dto(self, dto) -> Dict[str, Any]:
+        """
+        Convert a DTO object to a JSON-serializable dictionary.
+        
+        Args:
+            dto: DTO object to serialize
+            
+        Returns:
+            JSON-serializable dictionary
+        """
+        if dto is None:
+            return None
+        
+        result = {}
+        for key, value in vars(dto).items():
+            if isinstance(value, datetime):
+                result[key] = value.isoformat()
+            elif hasattr(value, '__dict__'):
+                # Handle nested DTOs
+                result[key] = self._serialize_dto(value)
+            elif isinstance(value, (int, float, str, bool)) or value is None:
+                # Primitive types can be stored directly
+                result[key] = value
+            elif isinstance(value, CandleDto):
+                # Handle candle specially
+                result[key] = self._serialize_candle(value)
+            else:
+                # Skip complex types that can't be directly serialized
+                pass
+        
+        return result
+
     def _get_empty_result(self) -> OrderBlockResultDto:
         """Return an empty result structure when no order blocks can be detected"""
         return OrderBlockResultDto(
