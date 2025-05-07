@@ -8,6 +8,8 @@ from strategy.domain.dto.bos_dto import StructureBreakDto, StructureBreakResultD
 from strategy.domain.dto.fvg_dto import FvgDto, FvgResultDto
 from strategy.domain.dto.doji_dto import DojiDto, DojiResultDto
 from strategy.domain.types.indicator_type_enum import IndicatorType
+from data.database.repository.order_block_repository import OrderBlockRepository
+
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +30,7 @@ class OrderBlockIndicator(Indicator):
     If multiple doji candles exist before an FVG, the later one is selected.
     """
     
-    def __init__(self, params: Dict[str, Any] = None):
+    def __init__(self, repository: OrderBlockRepository, params: Dict[str, Any] = None):
         """
         Initialize order block detector with parameters
         
@@ -42,6 +44,9 @@ class OrderBlockIndicator(Indicator):
                 - require_bos: Whether a break of structure is required for order block (default: True)
                 - mitigation_threshold: Percentage of zone that must be mitigated to invalidate (default: 0.5)
         """
+
+        self.repository = repository
+        
         default_params = {
             'max_body_to_range_ratio': 0.4,   # Maximum ratio of body to total range
             'min_wick_to_body_ratio': 1.5,    # Minimum ratio of wicks to body

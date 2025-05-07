@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 from .base import Indicator
 from strategy.domain.dto.bos_dto import StructureBreakDto, StructureBreakResultDto
 from strategy.domain.models.market_context import MarketContext
+from data.database.repository.bos_repository import BosRepository
+
 from shared.domain.dto.candle_dto import CandleDto
 import logging
 
@@ -22,7 +24,7 @@ class StructureBreakIndicator(Indicator):
     4. Lower High (LH): Price creates a high that's lower than the previous swing high
     """
     
-    def __init__(self, params: Dict[str, Any] = None):
+    def __init__(self, repository: BosRepository, params: Dict[str, Any] = None):
         """
         Initialize Breaking of Structure detector with parameters
         
@@ -32,11 +34,14 @@ class StructureBreakIndicator(Indicator):
                 - confirmation_candles: Number of candles to confirm break (default: 1)
                 - min_break_percentage: Minimum percentage break beyond structure (default: 0.05%)
         """
+        self.repository = repository
+        
         default_params = {
             'lookback_period': 10,         # Number of candles to look back
             'confirmation_candles': 1,      # Number of candles to confirm the break
             'min_break_percentage': 0.0005  # Minimum 0.05% break beyond structure
         }
+        
         
         if params:
             default_params.update(params)

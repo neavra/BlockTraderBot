@@ -42,6 +42,7 @@ class StrategyService:
             config: Configuration dictionary
         """
         # TODO Refactor the definition of queues properly
+        self.database = Database(db_url=config["data"]["database"]["database_url"])
         self.consumer_queue = consumer_queue
         self.producer_queue = producer_queue
         self.cache_service = cache_service
@@ -111,7 +112,7 @@ class StrategyService:
             # Initialize market structure with cache service
             self.context_engine = ContextEngine(
                 cache_service=self.cache_service,
-                database=Database(db_url=self.config["data"]["database"]["database_url"]),
+                database=self.database,
                 config=market_context_params
             )
 
@@ -131,7 +132,7 @@ class StrategyService:
         logger.info("Initializing indicators...")
         
         # Create indicator factory
-        indicator_factory = IndicatorFactory()
+        indicator_factory = IndicatorFactory(self.database)
         
         # Get indicator configurations
         indicator_configs = self.config.get('strategy', {}).get('indicators', {})

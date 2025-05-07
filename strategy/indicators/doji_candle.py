@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 from strategy.indicators.base import Indicator
 from shared.domain.dto.candle_dto import CandleDto
 from strategy.domain.dto.doji_dto import DojiDto, DojiResultDto
+from data.database.repository.doji_repository import DojiRepository
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,7 +17,7 @@ class DojiCandleIndicator(Indicator):
     relative to its range (high and low). It indicates market indecision and potential reversal points.
     """
     
-    def __init__(self, params: Dict[str, Any] = None):
+    def __init__(self, repository: DojiRepository, params: Dict[str, Any] = None):
         """
         Initialize Doji candle detector with parameters
         
@@ -25,6 +27,8 @@ class DojiCandleIndicator(Indicator):
                 - min_range_to_price_ratio: Minimum candle range relative to price for significance
                 - lookback_period: Number of candles to analyze
         """
+        self.repository = repository
+        
         default_params = {
             'max_body_to_range_ratio': 0.1,     # Maximum body/range ratio to qualify as doji
             'min_range_to_price_ratio': 0.005,  # Minimum range/price ratio (filters out tiny dojis)

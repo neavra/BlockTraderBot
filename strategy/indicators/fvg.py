@@ -2,6 +2,8 @@ from typing import Dict, Any, List
 from datetime import datetime, timezone
 from .base import Indicator
 from strategy.domain.dto.fvg_dto import FvgDto, FvgResultDto
+from data.database.repository.fvg_repository import FvgRepository
+
 from shared.domain.dto.candle_dto import CandleDto
 import logging
 
@@ -19,7 +21,7 @@ class FVGIndicator(Indicator):
     - Bearish FVG: High of a candle is below the low of the candle two positions back
     """
     
-    def __init__(self, params: Dict[str, Any] = None):
+    def __init__(self, repository: FvgRepository, params: Dict[str, Any] = None):
         """
         Initialize FVG detector with parameters
         
@@ -27,6 +29,9 @@ class FVGIndicator(Indicator):
             params: Dictionary containing parameters:
                 - min_gap_size: Minimum gap size as percentage (default: 0.2%)
         """
+
+        self.repository = repository
+        
         default_params = {
             'min_gap_size': 0.2,  # Minimum gap size as percentage
         }
