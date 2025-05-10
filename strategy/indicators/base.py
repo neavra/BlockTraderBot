@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, Union, TypeVar, Generic, List
+from typing import Dict, Any, Optional, Union, TypeVar, Generic, List, Tuple
 from strategy.domain.dto.indicator_result_dto import IndicatorResultDto
 
 class Indicator(ABC):
@@ -32,3 +32,40 @@ class Indicator(ABC):
             Dictionary specifying required data (timeframes, length, etc.)
         """
         pass
+
+    @abstractmethod
+    async def process_existing_indicators(self, indicators: List[Any], candles: List[Any]) -> Tuple[List[Any], List[Any]]:
+        """
+        Process existing indicator instances for updates or mitigation
+        
+        Args:
+            instances: List of existing indicator instances from database
+            candles: Recent candles to check for mitigation or updates
+            
+        Returns:
+            Tuple of (updated_instances, valid_instances)
+        """
+        pass
+        
+    def get_relevant_price_range(self, candles: List[Any]) -> Tuple[float, float]:
+        """
+        Get the relevant price range from the provided candles
+        Used to fetch only relevant instances from database
+        
+        Args:
+            candles: List of recent candles
+            
+        Returns:
+            Tuple of (min_price, max_price) to search for instances
+        """
+        if not candles:
+            return (0, 0)
+            
+        # Find the highest high and lowest low in the candle set
+        highest = max(candle.high for candle in candles)
+        lowest = min(candle.low for candle in candles)
+        
+        # Add a buffer for border cases (5% buffer)
+        buffer = (highest - lowest) * 0.05
+        
+        return (lowest - buffer, highest + buffer)

@@ -340,6 +340,32 @@ class OrderBlockIndicator(Indicator):
         
         return demand_blocks, supply_blocks
     
+    async def process_existing_indicators(self, indicators: List[OrderBlockDto], candles: List[CandleDto]) -> Tuple[List[OrderBlockDto], List[OrderBlockDto]]:
+        """
+        Process existing order blocks for updates or mitigation
+        
+        Args:
+            instances: List of existing order blocks from database
+            candles: Recent candles to check for mitigation or updates
+            
+        Returns:
+            Tuple of (updated_instances, valid_instances)
+        """
+        updated_blocks = []
+        valid_blocks = []
+        
+        for block in indicators:
+            if block.status == 'active':
+                # Check for mitigation
+                updated_block = self.check_mitigation(block, candles)
+                updated_blocks.append(updated_block)
+                
+                # If still active or only partially mitigated, add to valid blocks
+                if updated_block.status != 'mitigated':
+                    valid_blocks.append(updated_block)
+        
+        return updated_blocks, valid_blocks
+    
     def check_mitigation(self, order_block: OrderBlockDto, candles: List[CandleDto]) -> OrderBlockDto:
         """
         Check if an order block has been mitigated by new candles.
@@ -355,7 +381,7 @@ class OrderBlockIndicator(Indicator):
         ob_high = order_block.price_high
         ob_low = order_block.price_low
         ob_type = order_block.type  # 'demand' or 'supply'
-        ob_idx = order_block.index
+        ob_timestamp = order_block.timestamp
         
         # Calculate order block zone size
         zone_size = ob_high - ob_low
@@ -365,7 +391,7 @@ class OrderBlockIndicator(Indicator):
             return order_block  # Invalid zone, consider fully mitigated
         
         # Extract mitigation threshold from params
-        mitigation_threshold = self.params['mitigation_threshold']
+        # mitigation_threshold = self.params['mitigation_threshold']
         
         # Continue with existing mitigation percentage if available
         mitigation_percentage = order_block.mitigation_percentage if hasattr(order_block, 'mitigation_percentage') else 0.0
@@ -376,7 +402,7 @@ class OrderBlockIndicator(Indicator):
         
         for candle in candles:
             # Skip candles before or at the order block formation
-            if 'index' in candle and candle['index'] <= ob_idx:
+            if candle.timestamp <= ob_timestamp:
                 continue
             
             # First, check if this candle interacts with the order block zone
@@ -441,38 +467,11 @@ class OrderBlockIndicator(Indicator):
         order_block.touched = was_touched
         order_block.mitigation_percentage = mitigation_percentage
         
-        # Check if mitigation threshold exceeded
-        if mitigation_percentage >= mitigation_threshold * 100:
+        # Check if mitigation threshold exceeded, for now as long as it is touched it is mitigated
+        if mitigation_percentage >= 0:
             order_block.status = 'mitigated'
         
         return order_block
-    
-    def process_existing_order_blocks(self, existing_blocks: List[OrderBlockDto], candles: List[CandleDto]) -> Tuple[List[OrderBlockDto], List[OrderBlockDto]]:
-        """
-        Process existing order blocks for mitigation with new candles.
-        
-        Args:
-            existing_blocks: List of existing order blocks from database
-            candles: New candles to check for mitigation
-            
-        Returns:
-            Tuple of (updated_blocks, remaining_active_blocks)
-        """
-        updated_blocks = []
-        remaining_active_blocks = []
-        
-        for block in existing_blocks:
-            # Only process active blocks
-            if block.status == 'active':
-                # Check for mitigation
-                updated_block = self.check_mitigation(block, candles)
-                updated_blocks.append(updated_block)
-                
-                # If still active, add to remaining active blocks
-                if updated_block.status == 'active':
-                    remaining_active_blocks.append(updated_block)
-        
-        return updated_blocks, remaining_active_blocks
     
     def _serialize_candle(self, candle: CandleDto) -> Dict[str, Any]:
         """
