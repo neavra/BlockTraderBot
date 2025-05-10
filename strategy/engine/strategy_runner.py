@@ -243,9 +243,28 @@ class StrategyRunner:
 
             # Execute all applicable strategies with this data
             await self.execute_strategies(candle_data, market_contexts)
+            
+            # Process mitigation after strategy execution
+            await self.execute_mitigation(symbol, timeframe, candle_data, exchange)
 
         except Exception as e:
             logger.error(f"Error in event-based strategy execution: {e}", exc_info=True)
+
+    async def execute_mitigation(self, symbol: str, timeframe: str, candles: List[CandleDto], exchange: str = "default"):
+        """
+        Execute mitigation processing for indicators.
+        
+        Args:
+            symbol: Trading symbol
+            timeframe: Timeframe
+            candles: Recent candle data
+            exchange: Exchange name
+        """
+        try:
+            # TODO
+            self.mitigation_service.process_mitigation()
+        except Exception as e:
+            logger.error(f"Error executing mitigation for {symbol} {timeframe}: {e}", exc_info=True)
 
     async def execute_strategies(self, candle_data: List[CandleDto], market_contexts: List[MarketContext]):
         """
