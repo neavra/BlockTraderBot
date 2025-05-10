@@ -330,7 +330,7 @@ class StructureBreakIndicator(Indicator):
         return {
             'candles': True,
             'market_context': True,  # Requires market context with swing points
-            'lookback_period': 50,
+            'lookback_period': self.params['lookback_period'],
             'timeframes': ['1m', '5m', '15m', '30m', '1h', '4h', '1d'],  # Supported timeframes
             'indicators': []  # No dependency on other indicators
         }

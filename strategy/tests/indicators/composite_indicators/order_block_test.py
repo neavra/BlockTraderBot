@@ -10,6 +10,7 @@ from shared.domain.dto.candle_dto import CandleDto
 from strategy.domain.dto.bos_dto import StructureBreakDto, StructureBreakResultDto
 from strategy.domain.dto.fvg_dto import FvgDto, FvgResultDto
 from strategy.domain.dto.doji_dto import DojiDto, DojiResultDto
+from strategy.domain.types.indicator_type_enum import IndicatorType
 
 class TestOrderBlockIndicator(unittest.TestCase):
     """Test suite for OrderBlockIndicator class."""
@@ -344,9 +345,9 @@ class TestOrderBlockIndicator(unittest.TestCase):
         
         # Check indicator dependencies
         dependencies = requirements['indicators']
-        self.assertIn('structure_break', dependencies)
-        self.assertIn('fvg', dependencies)
-        self.assertIn('doji_candle', dependencies)
+        self.assertIn(IndicatorType.STRUCTURE_BREAK, dependencies)
+        self.assertIn(IndicatorType.FVG, dependencies)
+        self.assertIn(IndicatorType.DOJI_CANDLE, dependencies)
 
 
 if __name__ == '__main__':

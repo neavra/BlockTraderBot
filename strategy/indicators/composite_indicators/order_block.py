@@ -60,7 +60,7 @@ class OrderBlockIndicator(Indicator):
         if params:
             default_params.update(params)
             
-        super().__init__(default_params)
+        super().__init__(repository, default_params)
     
     async def calculate(self, data: Dict[str, Any]) -> OrderBlockResultDto:
         """

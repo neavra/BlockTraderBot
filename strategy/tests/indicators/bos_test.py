@@ -437,7 +437,7 @@ class TestStructureBreakIndicator(unittest.TestCase):
         # Check basic requirements
         self.assertTrue(requirements['candles'])
         self.assertTrue(requirements['market_context'])
-        self.assertEqual(requirements['lookback_period'], 50)
+        self.assertEqual(requirements['lookback_period'], 10)
         
         # Check timeframes
         self.assertIn('1m', requirements['timeframes'])
