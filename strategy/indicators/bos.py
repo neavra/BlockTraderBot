@@ -46,7 +46,7 @@ class StructureBreakIndicator(Indicator):
         if params:
             default_params.update(params)
             
-        super().__init__(default_params)
+        super().__init__(repository, default_params)
     
     async def calculate(self, data: Dict[str, Any]) -> StructureBreakResultDto:
         """
@@ -136,7 +136,6 @@ class StructureBreakIndicator(Indicator):
                         swing_reference=swing_high_price,
                         candle=candle,
                         timestamp=timestamp,
-                        direction="bullish"  # Add direction explicitly
                     ))
             
             # Lower Low detection (bearish)
@@ -151,7 +150,6 @@ class StructureBreakIndicator(Indicator):
                         swing_reference=swing_low_price,
                         candle=candle,
                         timestamp=timestamp,
-                        direction="bearish"  # Add direction explicitly
                     ))
             
             # Higher Low detection (bullish)
@@ -166,7 +164,6 @@ class StructureBreakIndicator(Indicator):
                     swing_reference=swing_low_price,
                     candle=candle,
                     timestamp=timestamp,
-                    direction="bullish"  # Add direction explicitly
                 ))
             
             # Lower High detection (bearish)
@@ -180,7 +177,6 @@ class StructureBreakIndicator(Indicator):
                     swing_reference=swing_high_price,
                     candle=candle,
                     timestamp=timestamp,
-                    direction="bearish"  # Add direction explicitly
                 ))
         
         # Sort each list by index (most recent first)
@@ -200,7 +196,6 @@ class StructureBreakIndicator(Indicator):
                         "symbol": symbol,
                         "timeframe": timeframe,
                         "break_type": bos.break_type,
-                        "direction": bos.direction,
                         "break_value": float(bos.break_value),
                         "break_percentage": float(bos.break_percentage) * 100,  # Convert to percentage
                         "swing_reference": float(bos.swing_reference),

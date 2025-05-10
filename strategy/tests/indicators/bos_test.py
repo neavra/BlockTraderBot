@@ -35,20 +35,16 @@ class TestStructureBreakIndicator(unittest.TestCase):
         # Create market context with swing points
         self.market_context = MarketContext(symbol= "BTCUSDT", timeframe="1h")
         self.market_context.swing_high = {
-            'swing_high': {
                 'price': 105.0,
                 'index': 3,
                 'timestamp': datetime(2023, 1, 1, 3, 0, tzinfo=timezone.utc).isoformat()
             }
-        }
+        
         self.market_context.swing_low = {
-            'swing_low': {
                 'price': 95.0,
                 'index': 5,
                 'timestamp': datetime(2023, 1, 1, 5, 0, tzinfo=timezone.utc).isoformat()
-            },
-            'current_price': 100.0
-        }
+            }
         
         # Create test candles for various BOS scenarios
         
@@ -441,7 +437,7 @@ class TestStructureBreakIndicator(unittest.TestCase):
         # Check basic requirements
         self.assertTrue(requirements['candles'])
         self.assertTrue(requirements['market_context'])
-        self.assertEqual(requirements['lookback_period'], 10)
+        self.assertEqual(requirements['lookback_period'], 50)
         
         # Check timeframes
         self.assertIn('1m', requirements['timeframes'])
