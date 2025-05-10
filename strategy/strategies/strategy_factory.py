@@ -2,6 +2,7 @@
 from typing import Dict, Any, Type
 from strategy.indicators.base import Indicator
 from strategy.strategies.base import Strategy
+from strategy.domain.types.indicator_type_enum import IndicatorType
 
 # Import all strategy implementations
 from strategy.strategies.hidden_ob_strategy import HiddenOrderBlockStrategy
@@ -17,7 +18,7 @@ class StrategyFactory:
             'order_block': OrderBlockStrategy
         }
     
-    def create_strategy(self, name: str, indicators: Dict[str, Indicator] = None, 
+    def create_strategy(self, name: str, indicators: Dict[IndicatorType, Indicator] = None, 
                       params: Dict[str, Any] = None) -> Strategy:
         """
         Create a strategy instance by name.

@@ -32,7 +32,7 @@ class IndicatorFactory:
             IndicatorType.FVG: FVGIndicator,
             IndicatorType.STRUCTURE_BREAK: StructureBreakIndicator,
             IndicatorType.DOJI_CANDLE: DojiCandleIndicator,
-            IndicatorType.HIDDEN_ORDER_BLOCK: HiddenOrderBlockIndicator,
+            # IndicatorType.HIDDEN_ORDER_BLOCK: HiddenOrderBlockIndicator,
         }
 
         self._indicator_repository_map: Dict[IndicatorType, Any] = {

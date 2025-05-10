@@ -2,6 +2,8 @@ from typing import Dict, Any, Optional
 from strategy.strategies.base import Strategy
 from strategy.indicators.base import Indicator
 from shared.domain.dto.signal_dto import SignalDto
+from strategy.domain.types.indicator_type_enum import IndicatorType
+
 
 class OrderBlockStrategy(Strategy):
     """
@@ -31,7 +33,7 @@ class OrderBlockStrategy(Strategy):
         if indicators is None:
             raise ValueError("Indicators must be provided for Order Block strategy")
         
-        required_indicators = ['order_block', 'fvg', 'structure_break', 'doji_candle']
+        required_indicators = [IndicatorType.ORDER_BLOCK, IndicatorType.FVG, IndicatorType.STRUCTURE_BREAK, IndicatorType.DOJI_CANDLE]
         for indicator_name in required_indicators:
             if indicator_name not in indicators:
                 raise ValueError(f"Missing required indicator: {indicator_name}")

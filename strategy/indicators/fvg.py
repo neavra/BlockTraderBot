@@ -196,6 +196,9 @@ class FVGIndicator(Indicator):
             bearish_fvgs=bearish_fvgs
         )
 
+    async def process_existing_indicators(self, indicators: List[Any], candles: List[CandleDto]):
+        return None
+
     def _serialize_candle(self, candle: CandleDto) -> Dict[str, Any]:
         """
         Convert a CandleDto to a JSON-serializable dictionary.

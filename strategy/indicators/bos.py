@@ -236,6 +236,9 @@ class StructureBreakIndicator(Indicator):
             bullish_breaks=bullish_breaks,
             bearish_breaks=bearish_breaks
         )
+    
+    async def process_existing_indicators(self, indicators: List[Any], candles: List[CandleDto]):
+        return None
 
     def _serialize_candle(self, candle: CandleDto) -> Dict[str, Any]:
         """
@@ -332,7 +335,7 @@ class StructureBreakIndicator(Indicator):
         return {
             'candles': True,
             'market_context': True,  # Requires market context with swing points
-            'lookback_period': self.params['lookback_period'],
+            'lookback_period': 50,
             'timeframes': ['1m', '5m', '15m', '30m', '1h', '4h', '1d'],  # Supported timeframes
             'indicators': []  # No dependency on other indicators
         }

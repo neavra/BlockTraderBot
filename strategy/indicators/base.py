@@ -1,13 +1,15 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, Union, TypeVar, Generic, List, Tuple
 from strategy.domain.dto.indicator_result_dto import IndicatorResultDto
+from data.database.repository.base_repository import BaseRepository
 
 class Indicator(ABC):
     """Base class for all indicators"""
     
-    def __init__(self, params: Dict[str, Any] = None):
+    def __init__(self, repository: BaseRepository, params: Dict[str, Any] = None):
         """Initialize the indicator with parameters"""
         self.params = params or {}
+        self.repository = repository
         self.name = self.__class__.__name__
         
     @abstractmethod

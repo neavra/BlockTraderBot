@@ -129,7 +129,7 @@ class OrderBlockRepository(BaseRepository[OrderBlockModel]):
             self.logger.error(f"Error finding active order blocks: {str(e)}")
             return []
     
-    def find_active_order_blocks_in_price_range(
+    def find_active_indicators_in_price_range(
         self,
         exchange: str,
         symbol: str,
@@ -179,7 +179,7 @@ class OrderBlockRepository(BaseRepository[OrderBlockModel]):
             )
             return []
     
-    def update_block_status(
+    def update_indicator_status(
         self,
         block_id: int,
         status: str,

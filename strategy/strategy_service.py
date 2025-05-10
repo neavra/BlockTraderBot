@@ -143,7 +143,7 @@ class StrategyService:
                 continue
                 
             try:
-                ind_enum = IndicatorType(ind_name_str)
+                ind_enum = IndicatorType.get_by_type_name(ind_name_str)
                 indicator = indicator_factory.create_indicator(
                     ind_enum, 
                     params=ind_config.get('params', {})
@@ -151,7 +151,7 @@ class StrategyService:
                 self.indicators[ind_enum] = indicator
                 logger.info(f"Initialized indicator: {ind_name_str}")
             except Exception as e:
-                logger.error(f"Failed to initialize indicator {ind_name_str}: {e}")
+                logger.error(f"Failed to initialize indicator {ind_enum}: {e}")
         
         logger.info(f"Initialized {len(self.indicators)} indicators")
     

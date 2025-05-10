@@ -7,10 +7,12 @@ from datetime import datetime
 from strategy.engine.indicator_dag import IndicatorDAG
 from strategy.strategies.base import Strategy
 from strategy.context.context_engine import ContextEngine
+from strategy.engine.mitigation_service import MitigationService
 from shared.domain.dto.signal_dto import SignalDto
 from shared.queue.queue_service import QueueService
 from shared.cache.cache_service import CacheService
 from shared.domain.dto.candle_dto import CandleDto
+from strategy.indicators.base import Indicator
 from shared.constants import Exchanges, Queues, RoutingKeys, CacheKeys, CacheTTL
 from strategy.domain.models.market_context import MarketContext
 
@@ -58,8 +60,11 @@ class StrategyRunner:
         self.execution_task = None
         self.main_loop = None  # Will store the event loop for callbacks
         
+        self.all_indicators : Dict[str, Indicator] = {} 
         # Create indicator DAG
         self.indicator_dag = IndicatorDAG()
+        # Initialize mitigation service
+        self.mitigation_service = MitigationService()
     
     async def start(self):
         """Start the strategy runner"""
@@ -81,6 +86,9 @@ class StrategyRunner:
         
         # Initialize the indicator DAG with registered indicators
         await self._init_indicator_dag()
+
+        # Register indicators for mitigation processing
+        await self._init_mitigation_service()
         
         logger.info("Strategy runner started")
     
@@ -129,16 +137,14 @@ class StrategyRunner:
         """Initialize the indicator DAG by registering indicators and their dependencies"""
         logger.info("Initializing indicator DAG...")
         
-        # Extract all unique indicators from strategies
-        all_indicators = {}
         
         # First, gather all indicators from strategies
         for strategy in self.strategies:
             for name, indicator in strategy.indicators.items():
-                all_indicators[name] = indicator
+                self.all_indicators[name] = indicator
         
         # Now register each indicator with its dependencies
-        for name, indicator in all_indicators.items():
+        for name, indicator in self.all_indicators.items():
             # Get requirements from indicator
             requirements = indicator.get_requirements()
             
@@ -151,6 +157,31 @@ class StrategyRunner:
         # Compute initial execution order
         execution_order = self.indicator_dag.compute_execution_order()
         logger.info(f"Indicator execution order established: {execution_order}")
+
+    async def _init_mitigation_service(self):
+        """Register indicators that require mitigation with the mitigation service."""
+        logger.info("Registering indicators for mitigation processing...")
+        
+        try:
+            # Get all indicator types that require mitigation
+            
+            # Register each one with the mitigation service
+            for name, indicator in self.all_indicators.items():                
+                if indicator:
+                    # Register with the mitigation service
+                    self.mitigation_service.register_indicator(
+                        indicator_type=name,
+                        indicator=indicator,
+                    )
+                    
+                    logger.info(f"Registered {name} for mitigation processing")
+                else:
+                    logger.warning(f"Could not register {name} for mitigation (missing indicator or repository)")
+            
+            logger.info(f"Registered {len(self.mitigation_service.indicators)} indicators for mitigation processing")
+            
+        except Exception as e:
+            logger.error(f"Error registering indicators for mitigation: {e}", exc_info=True)
 
     def _on_candle_event(self, event: Dict[str, Any]):
         """

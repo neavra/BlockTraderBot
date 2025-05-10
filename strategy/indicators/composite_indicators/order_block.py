@@ -557,7 +557,7 @@ class OrderBlockIndicator(Indicator):
         """
         return {
             'candles': True,
-            'lookback_period': self.params['lookback_period'],
+            'lookback_period': 50,
             'timeframes': ['15m', '1h', '4h', '1d'],
             'indicators': [IndicatorType.STRUCTURE_BREAK, IndicatorType.FVG, IndicatorType.DOJI_CANDLE]
         }

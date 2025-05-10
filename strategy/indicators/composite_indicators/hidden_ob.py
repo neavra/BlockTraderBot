@@ -3,6 +3,7 @@ from typing import Dict, Any, List
 from strategy.indicators.base import Indicator
 import logging
 from strategy.domain.types.indicator_type_enum import IndicatorType
+from shared.domain.dto.candle_dto import CandleDto
 
 
 logger = logging.getLogger(__name__)
@@ -73,6 +74,9 @@ class HiddenOrderBlockIndicator(Indicator):
             'has_valid_blocks': False,
             'latest_block': None
         }
+    
+    async def process_existing_indicators(self, indicators: List[Any], candles: List[CandleDto]):
+        return None
     
     def _get_empty_result(self) -> Dict[str, Any]:
         """Return an empty result structure"""
