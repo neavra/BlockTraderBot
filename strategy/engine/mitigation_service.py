@@ -44,24 +44,26 @@ class MitigationService:
             logger.debug(f"Indicator '{indicator_type}' does not require mitigation, skipping registration")
     
     async def process_mitigation(
-        self, 
-        symbol: str, 
-        timeframe: str, 
+        self,
         candles: List[CandleDto],
-        exchange: str = "default"
     ) -> Dict[str, Any]:
         """
         Process mitigation for all registered indicators for a symbol/timeframe.
         
         Args:
-            symbol: Trading symbol
-            timeframe: Timeframe
             candles: List of recent candles
-            exchange: Exchange name
             
         Returns:
             Dictionary with mitigation results
         """
+        if not candles:
+            logger.info("No candles passed into process_mitigation")
+            return {}
+        
+        exchange = candles[0].exchange
+        symbol = candles[0].symbol
+        timeframe = candles[0].timeframe
+
         results = {}
         
         # Process each registered indicator
@@ -72,6 +74,7 @@ class MitigationService:
                 repository = indicator.repository
                 # Get active instances in the price range
                 if hasattr(repository, 'find_active_instances_in_price_range'):
+                    # TODO currently returns a dictionary
                     instances = await indicator.repository.find_active_indicators_in_price_range(
                         exchange=exchange,
                         symbol=symbol,
@@ -80,7 +83,7 @@ class MitigationService:
                         timeframes=[timeframe]
                     )
                 else:
-                    logger.error(f"find_active_indicators_in_price_range method not found in repository, indicator type = {indicator_type} ")
+                    logger.error(f"find_active_indicators_in_price_range method not found in repository, indicator type = {indicator_type}")
                 
                 if not instances:
                     # No active instances to process
@@ -93,7 +96,7 @@ class MitigationService:
                     continue
                 
                 # Process the instances for mitigation
-                updated_instances, valid_instances = await indicator.process_existing_instances(instances, candles)
+                updated_instances, valid_instances = await indicator.process_existing_indicators(instances, candles)
                 
                 # Update the repository with the processed instances
                 updated_count = 0

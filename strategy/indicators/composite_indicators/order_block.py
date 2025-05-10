@@ -340,7 +340,7 @@ class OrderBlockIndicator(Indicator):
         
         return demand_blocks, supply_blocks
     
-    async def process_existing_indicators(self, indicators: List[OrderBlockDto], candles: List[CandleDto]) -> Tuple[List[OrderBlockDto], List[OrderBlockDto]]:
+    async def process_existing_indicators(self, indicators:  List[Dict[str, Any]], candles: List[CandleDto]) -> Tuple[List[OrderBlockDto], List[OrderBlockDto]]:
         """
         Process existing order blocks for updates or mitigation
         
@@ -351,10 +351,13 @@ class OrderBlockIndicator(Indicator):
         Returns:
             Tuple of (updated_instances, valid_instances)
         """
+
+        existing_blocks: List[OrderBlockDto] = [OrderBlockDto.from_dict(ob) for ob in indicators]
+
         updated_blocks = []
         valid_blocks = []
         
-        for block in indicators:
+        for block in existing_blocks:
             if block.status == 'active':
                 # Check for mitigation
                 updated_block = self.check_mitigation(block, candles)

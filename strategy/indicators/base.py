@@ -36,7 +36,7 @@ class Indicator(ABC):
         pass
 
     @abstractmethod
-    async def process_existing_indicators(self, indicators: List[Any], candles: List[Any]) -> Tuple[List[Any], List[Any]]:
+    async def process_existing_indicators(self, indicators:  List[Dict[str, Any]], candles: List[Any]) -> Tuple[List[Any], List[Any]]:
         """
         Process existing indicator instances for updates or mitigation
         
