@@ -129,23 +129,23 @@ class OrderBlockRepository(BaseRepository[OrderBlockModel]):
             self.logger.error(f"Error finding active order blocks: {str(e)}")
             return []
     
-    def find_order_blocks_by_price_range(
+    def find_active_order_blocks_in_price_range(
         self,
         exchange: str,
         symbol: str,
-        price_low: float,
-        price_high: float,
-        status: Optional[str] = 'active'
+        min_price: float,
+        max_price: float,
+        timeframes: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
         """
-        Find order blocks that overlap with a specified price range.
+        Find active order blocks that overlap with a specified price range.
         
         Args:
             exchange: Exchange name
             symbol: Trading symbol
-            price_low: Lower bound of the price range
-            price_high: Upper bound of the price range
-            status: Optional status filter (default: 'active')
+            min_price: Lower bound of the price range
+            max_price: Upper bound of the price range
+            timeframes: Optional list of timeframes to filter on
             
         Returns:
             List of order block dictionaries that overlap with the price range
@@ -155,20 +155,21 @@ class OrderBlockRepository(BaseRepository[OrderBlockModel]):
                 and_(
                     self.model_class.exchange == exchange,
                     self.model_class.symbol == symbol,
+                    self.model_class.status.in_(['active']),
                     # Find blocks where either:
                     # 1. Block's low is within our range
                     # 2. Block's high is within our range
                     # 3. Block completely contains our range
                     or_(
-                        and_(self.model_class.price_low >= price_low, self.model_class.price_low <= price_high),
-                        and_(self.model_class.price_high >= price_low, self.model_class.price_high <= price_high),
-                        and_(self.model_class.price_low <= price_low, self.model_class.price_high >= price_high)
+                        and_(self.model_class.price_low >= min_price, self.model_class.price_low <= max_price),
+                        and_(self.model_class.price_high >= min_price, self.model_class.price_high <= max_price),
+                        and_(self.model_class.price_low <= min_price, self.model_class.price_high >= max_price)
                     )
                 )
             )
             
-            if status is not None:
-                query = query.filter(self.model_class.status == status)
+            if timeframes:
+                query = query.filter(self.model_class.timeframe.in_(timeframes))
             
             db_blocks = query.all()
             return [block.to_dict() for block in db_blocks]

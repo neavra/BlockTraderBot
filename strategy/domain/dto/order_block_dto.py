@@ -21,7 +21,7 @@ class OrderBlockDto:
     timestamp: datetime
     doji_data: DojiDto
     bos_data: StructureBreakDto
-    status: str
+    status: str # 'active', 'mitigated'
     touched: bool
     mitigation_percentage: float
     created_at:datetime
