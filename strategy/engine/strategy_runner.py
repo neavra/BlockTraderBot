@@ -369,7 +369,6 @@ class StrategyRunner:
             
             # Get all candles from the sorted set with scores (timestamps) higher than min_score
             # This way we only retrieve candles newer than the last processed one
-            # TODO need to implement
             candles = self.cache_service.get_from_sorted_set_by_score(
                 candles_sorted_set_key,
                 min_score=min_score,

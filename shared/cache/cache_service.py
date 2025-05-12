@@ -1,7 +1,7 @@
 import redis
 import json
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -335,6 +335,73 @@ class CacheService:
                 return self.redis.zrange(name, start, end)
         except Exception as e:
             logger.error(f"Error getting from sorted set {name}: {str(e)}")
+            return []
+        
+    def get_from_sorted_set_by_score(
+        self, 
+        name: str, 
+        min_score: Union[float, str] = '-inf', 
+        max_score: Union[float, str] = '+inf',
+        with_scores: bool = False,
+        limit: Optional[int] = None,
+        descending: bool = False
+    ) -> List[Union[str, Tuple[str, float]]]:
+        """
+        Get values from a sorted set within the specified score range.
+        
+        Args:
+            name: Sorted set name
+            min_score: Minimum score (default: '-inf')
+            max_score: Maximum score (default: '+inf')
+            with_scores: Whether to include scores in the result
+            limit: Optional limit on number of results
+            descending: Whether to return in descending order
+            
+        Returns:
+            List of values, or list of (value, score) tuples if with_scores=True
+        """
+        try:
+            self._ensure_connection()
+            
+            # Determine if we need to apply a limit
+            offset = 0
+            count = None
+            if limit is not None:
+                offset = 0
+                count = limit
+                
+            # Choose the appropriate Redis command based on sort order
+            if descending:
+                # For descending order, we need to swap min and max and use ZREVRANGEBYSCORE
+                result = self.redis.zrevrangebyscore(
+                    name, 
+                    max=max_score,  # Note: for zrevrangebyscore, max comes first
+                    min=min_score,
+                    start=offset,
+                    num=count,
+                    withscores=with_scores
+                )
+            else:
+                # For ascending order, use ZRANGEBYSCORE
+                result = self.redis.zrangebyscore(
+                    name, 
+                    min=min_score, 
+                    max=max_score,
+                    start=offset,
+                    num=count,
+                    withscores=with_scores
+                )
+            
+            # Process results
+            if with_scores:
+                # Result will be a list of (value, score) tuples
+                return result
+            else:
+                # Result will be just a list of values
+                return result
+                
+        except Exception as e:
+            logger.error(f"Error getting from sorted set {name} by score: {str(e)}")
             return []
     
     def flush(self) -> bool:
