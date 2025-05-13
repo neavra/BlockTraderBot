@@ -247,6 +247,26 @@ class StrategyRunner:
             # Process mitigation after strategy execution
             await self.execute_mitigation(candle_data)
 
+            # Update the last_updated timestamp after all processing is complete
+            last_updated_key = CacheKeys.CANDLE_LAST_UPDATED.format(
+                exchange=exchange,
+                symbol=symbol,
+                timeframe=timeframe
+            )
+            
+            # Get the latest timestamp from the event or use current time
+            event_timestamp = event.get('timestamp')
+            current_time = datetime.now().isoformat()
+            latest_timestamp = event_timestamp if event_timestamp else current_time
+            
+            # Update the last updated info in cache
+            self.cache_service.set(last_updated_key, {
+                'timestamp': latest_timestamp,
+                'source': source,
+                'processed_at': current_time
+            })
+            
+            logger.debug(f"Updated last processed timestamp for {symbol} {timeframe} to {latest_timestamp}")
         except Exception as e:
             logger.error(f"Error in event-based strategy execution: {e}", exc_info=True)
 
@@ -380,8 +400,8 @@ class StrategyRunner:
                 logger.debug(f"No new candles found for {symbol} {timeframe} from {source}")
                 return None
             
-            # Convert the candles from JSON strings to dictionaries
-            candle_dtos = []
+            # Convert the candles from JSON strings to CandleDto objects
+            candle_dtos: List[CandleDto] = []
             for candle_data in candles:
                 # Unpack the candle data and score if with_scores is True
                 if isinstance(candle_data, (list, tuple)) and len(candle_data) == 2:
@@ -390,14 +410,35 @@ class StrategyRunner:
                     candle_json = candle_data
                 
                 try:
-                    candle = json.loads(candle_json) if isinstance(candle_json, str) else candle_json
-                    candle_dtos.append(candle)
-                except json.JSONDecodeError:
-                    logger.warning(f"Failed to decode candle JSON: {candle_json}")
+                    # Parse the JSON if it's a string
+                    candle_dict: Dict = json.loads(candle_json) if isinstance(candle_json, str) else candle_json
+                    
+                    # Convert dictionary to CandleDto object
+                    candle_dto = CandleDto(
+                        symbol=candle_dict.get('symbol'),
+                        exchange=candle_dict.get('exchange'),
+                        timeframe=candle_dict.get('timeframe'),
+                        timestamp=candle_dict.get('timestamp'),
+                        open=float(candle_dict.get('open')),
+                        high=float(candle_dict.get('high')),
+                        low=float(candle_dict.get('low')),
+                        close=float(candle_dict.get('close')),
+                        volume=float(candle_dict.get('volume')),
+                        is_closed=candle_dict.get('is_closed', True),
+                        raw_data=candle_dict.get('raw_data'),
+                        id=candle_dict.get('id')
+                    )
+                    
+                    candle_dtos.append(candle_dto)
+                except (json.JSONDecodeError, TypeError, ValueError) as e:
+                    logger.warning(f"Failed to decode or convert candle data: {e} - Data: {candle_json}")
                     continue
-            
+
             # Sort candles by timestamp (ascending)
-            candle_dtos.sort(key=lambda x: x.get('timestamp', 0))
+            # We need to handle datetime or string timestamps
+            candle_dtos.sort(key=lambda x: x.timestamp if isinstance(x.timestamp, (int, float)) 
+                            else datetime.fromisoformat(x.timestamp.replace('Z', '+00:00')).timestamp() 
+                            if isinstance(x.timestamp, str) else 0)
             
             # Get the latest candle (last in the sorted list)
             latest_candle = candle_dtos[-1] if candle_dtos else None
@@ -420,34 +461,118 @@ class StrategyRunner:
                 strategy_lookback = requirements.get('lookback_period', 0)
                 max_lookback = max(max_lookback, strategy_lookback)
             
-            # If we need additional historical candles for lookback, fetch them
-            # if max_lookback > len(candle_dtos):
-            #     additional_candles_needed = max_lookback - len(candle_dtos)
-            #     logger.debug(f"Fetching {additional_candles_needed} additional candles for lookback")
-                
-            #     # Get additional candles with scores less than min_score
-            #     historical_candles = self.cache_service.get_from_sorted_set_by_score(
-            #         candles_sorted_set_key,
-            #         min_score='-inf',
-            #         max_score=min_score,
-            #         with_scores=True,
-            #         limit=additional_candles_needed,
-            #         descending=True  # Get the most recent ones first
-            #     )
-                
-            #     for candle_data in historical_candles:
-            #         # Unpack the candle data and score if with_scores is True
-            #         if isinstance(candle_data, (list, tuple)) and len(candle_data) == 2:
-            #             candle_json, score = candle_data
-            #         else:
-            #             candle_json = candle_data
+            if max_lookback > candle_dtos:
+                if source == 'live':
+                    # If it's live data and we don't have enough candles,
+                    # try to get historical candles to supplement
+                    logger.info(f"Not enough live candles for {symbol} {timeframe}. Found: {len(candle_dtos)}, getting historical data")
+                    original_live_candles = candle_dtos.copy()
+                    # Get the historical candle set key
+                    historical_candles_key = CacheKeys.CANDLE_HISTORY_REST_API_DATA.format(
+                        exchange=exchange,
+                        symbol=symbol,
+                        timeframe=timeframe
+                    )
                     
-            #         try:
-            #             candle = json.loads(candle_json) if isinstance(candle_json, str) else candle_json
-            #             candle_dtos.insert(0, candle)  # Insert at the beginning
-            #         except json.JSONDecodeError:
-            #             logger.warning(f"Failed to decode historical candle JSON")
-            #             continue
+                    # Fetch the needed number of historical candles
+                    additional_candles_needed = max_lookback - len(candle_dtos)
+                    logger.debug(f"Fetching {additional_candles_needed} additional historical candles")
+                    
+                    # Get the most recent historical candles
+                    historical_candles = self.cache_service.get_from_sorted_set_by_score(
+                        historical_candles_key,
+                        min_score='-inf',
+                        max_score='+inf',
+                        with_scores=True,
+                        limit=additional_candles_needed,
+                        descending=True
+                    )
+                    
+                    # Process historical candles and add them to historical_candle_dtos
+                    historical_candle_dtos: List[CandleDto] = []
+                    for candle_json in historical_candles:
+                        try:
+                            # Parse the JSON if it's a string
+                            candle_dict = json.loads(candle_json) if isinstance(candle_json, str) else candle_json
+                            
+                            # Convert dictionary to CandleDto object
+                            candle_dto = CandleDto(
+                                symbol=candle_dict.get('symbol'),
+                                exchange=candle_dict.get('exchange'),
+                                timeframe=candle_dict.get('timeframe'),
+                                timestamp=candle_dict.get('timestamp'),
+                                open=float(candle_dict.get('open')),
+                                high=float(candle_dict.get('high')),
+                                low=float(candle_dict.get('low')),
+                                close=float(candle_dict.get('close')),
+                                volume=float(candle_dict.get('volume')),
+                                is_closed=candle_dict.get('is_closed', True),
+                                raw_data=candle_dict.get('raw_data'),
+                                id=candle_dict.get('id')
+                            )
+                            
+                            historical_candle_dtos.append(candle_dto)
+                        except (json.JSONDecodeError, TypeError, ValueError) as e:
+                            logger.warning(f"Failed to decode historical candle JSON: {e}")
+                            continue
+                    # Sort both sets of candles by timestamp
+                    # if historical_candle_dtos:
+                    #     # Sort historical candles (newest first since we retrieved them in descending order)
+                    #     historical_candle_dtos.sort(key=lambda x: x.timestamp if isinstance(x.timestamp, (int, float)) 
+                    #                 else datetime.fromisoformat(x.timestamp.replace('Z', '+00:00')).timestamp() 
+                    #                 if isinstance(x.timestamp, str) else 0, reverse=True)
+                        
+                    #     # Sort live candles (oldest first)
+                    #     original_live_candles.sort(key=lambda x: x.timestamp if isinstance(x.timestamp, (int, float)) 
+                    #                 else datetime.fromisoformat(x.timestamp.replace('Z', '+00:00')).timestamp() 
+                    #                 if isinstance(x.timestamp, str) else 0)
+                        
+                    #     # Check for gap between latest historical and earliest live candle
+                    #     if historical_candle_dtos and original_live_candles:
+                    #         latest_historical = historical_candle_dtos[0]  # First is latest since we sorted in reverse
+                    #         earliest_live = original_live_candles[0]  # First is earliest since we sorted normally
+                            
+                    #         # Get timestamps
+                    #         hist_time = latest_historical.timestamp
+                    #         live_time = earliest_live.timestamp
+                            
+                    #         # Convert to datetime if needed
+                    #         if isinstance(hist_time, str):
+                    #             hist_time = datetime.fromisoformat(hist_time.replace('Z', '+00:00'))
+                    #         if isinstance(live_time, str):
+                    #             live_time = datetime.fromisoformat(live_time.replace('Z', '+00:00'))
+                            
+                    #         # Convert to float timestamp if it's a datetime
+                    #         if isinstance(hist_time, datetime):
+                    #             hist_time = hist_time.timestamp()
+                    #         if isinstance(live_time, datetime):
+                    #             live_time = live_time.timestamp()
+                            
+                    #         # Calculate timeframe in seconds
+                    #         timeframe_seconds = self._timeframe_to_seconds(timeframe)
+                            
+                    #         # Check for gap: should be less than 2x the timeframe
+                    #         if (live_time - hist_time) > (2 * timeframe_seconds):
+                    #             logger.warning(f"Gap detected between historical and live candles for {symbol} {timeframe}. " 
+                    #                         f"Gap: {live_time - hist_time} seconds, expected less than {2 * timeframe_seconds} seconds")
+                    #             return None
+                        
+                    #     # If gap check passes, add the needed historical candles to our main list
+                        needed_count = min(additional_candles_needed, len(historical_candle_dtos))
+                        candle_dtos.extend(historical_candle_dtos[:needed_count])
+                    # Check again if we have enough candles after adding historical data
+                    if len(candle_dtos) < max_lookback:
+                        logger.warning(f"Still not enough candles after adding historical data for {symbol} {timeframe}. Found: {len(candle_dtos)}")
+                        return None
+                    
+                    # Sort candles by timestamp to ensure they're in order
+                    candle_dtos.sort(key=lambda x: x.timestamp if isinstance(x.timestamp, (int, float)) 
+                                else datetime.fromisoformat(x.timestamp.replace('Z', '+00:00')).timestamp() 
+                                if isinstance(x.timestamp, str) else 0)
+                else:
+                    # If it's historical data and we don't have enough candles, just return None
+                    logger.warning(f"Not enough historical candles for {symbol} {timeframe}. Found: {len(candle_dtos)}, minimum required: {max_lookback}")
+                    return None
             
             # Build market data dictionary
             data = {
@@ -457,9 +582,9 @@ class StrategyRunner:
                 'timestamp': datetime.now().isoformat(),
                 'candles': candle_dtos,
                 'latest_candle': latest_candle,
-                'current_price': latest_candle.get('close'),
+                'current_price': latest_candle.close,
                 'market_state': market_state,
-                'source': source,  # Include the source in the data for reference
+                'source': source,
                 'last_updated': last_updated_info
             }
             
@@ -469,8 +594,7 @@ class StrategyRunner:
             #     data['market_context'] = market_context
             
             # Update the last updated timestamp to the latest candle's timestamp
-            current_time = datetime.now().isoformat()
-            latest_timestamp = latest_candle.get('timestamp', current_time)
+            latest_timestamp = latest_candle.timestamp
             self.cache_service.set(last_updated_key, {
                 'timestamp': latest_timestamp,
                 'source': source
