@@ -331,8 +331,68 @@ class CandleManager(BaseManager):
             self.logger.error("CandleManage process_standard_candle, invalid source type")
 
         await self._cache_candle(candle=normalized_candle,cache_key=cache_key)
-        
+
+        await self._prune_candle_cache(normalized_candle.timeframe, cache_key)
     
+    async def _prune_candle_cache(self, timeframe: str, cache_key: str):
+        """
+        Prune the candle cache for a specific key to maintain a size limit.
+        
+        Args:
+            exchange: Exchange name
+            symbol: Trading pair symbol 
+            timeframe: Candle timeframe
+            cache_key: Redis key for the sorted set
+        """
+        try:
+            # Determine max candles to keep based on timeframe
+            max_candles = self._get_max_candles_for_timeframe(timeframe)
+            
+            # Get current count
+            current_count = self.candle_cache.sorted_set_count(cache_key)
+            
+            # Prune if needed
+            if current_count > max_candles:
+                to_remove = current_count - max_candles
+                removed = self.candle_cache.sorted_set_remove_range_by_rank(
+                    cache_key, 
+                    0,  # Start index (oldest)
+                    to_remove - 1  # End index
+                )
+                
+                if removed:
+                    self.logger.debug(f"Pruned {removed} candles from {cache_key} to maintain limit of {max_candles}")
+        except Exception as e:
+            self.logger.warning(f"Error pruning candle cache: {e}")
+
+    def _get_max_candles_for_timeframe(self, timeframe: str) -> int:
+        """
+        Determine maximum number of candles to keep based on timeframe.
+        
+        Args:
+            timeframe: Candle timeframe string
+            
+        Returns:
+            Maximum number of candles to keep in cache
+        """
+        # Convert timeframe to seconds
+        seconds = self._timeframe_to_seconds(timeframe)
+        
+        # Scale max candles inversely with timeframe duration
+        if seconds <= 60:  # 1m
+            return 10000  # More for lower timeframes
+        elif seconds <= 300:  # 5m
+            return 5000
+        elif seconds <= 900:  # 15m
+            return 3000
+        elif seconds <= 3600:  # 1h
+            return 1500
+        elif seconds <= 14400:  # 4h
+            return 750
+        elif seconds <= 86400:  # 1d
+            return 365  # About a year of daily candles
+        else:  # Weekly or above
+            return 200
     async def _process_custom_timeframes(self, standard_candle: CandleDto) -> None:
         """
         Process custom timeframes for a standard candle.
@@ -428,3 +488,19 @@ class CandleManager(BaseManager):
             if not self.historical_complete.get(key, False):
                 return True
         return False
+    
+    @staticmethod
+    def _timeframe_to_seconds(timeframe: str) -> int:
+        """
+        Convert timeframe string (e.g., "1h", "4h", "1d") to seconds.
+        
+        Args:
+            timeframe: Timeframe string
+            
+        Returns:
+            Timeframe duration in seconds
+        """
+        multipliers = {"m": 60, "h": 3600, "d": 86400}
+        unit = timeframe[-1]
+        value = int(timeframe[:-1])
+        return value * multipliers.get(unit, 0)

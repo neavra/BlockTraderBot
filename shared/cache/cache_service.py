@@ -403,6 +403,40 @@ class CacheService:
         except Exception as e:
             logger.error(f"Error getting from sorted set {name} by score: {str(e)}")
             return []
+
+    def sorted_set_count(self, key: str) -> int:
+        """
+        Get the number of elements in a sorted set.
+        
+        Args:
+            key: Redis key for the sorted set
+            
+        Returns:
+            Number of elements in the sorted set, 0 if key doesn't exist
+        """
+        try:
+            return self.redis.zcard(key)
+        except Exception as e:
+            logger.error(f"Error getting sorted set count: {e}")
+            return 0
+
+    def sorted_set_remove_range_by_rank(self, key: str, start: int, end: int) -> int:
+        """
+        Remove elements from a sorted set by their rank (position).
+        
+        Args:
+            key: Redis key for the sorted set
+            start: Start rank (0-based, inclusive)
+            end: End rank (0-based, inclusive)
+            
+        Returns:
+            Number of elements removed
+        """
+        try:
+            return self.redis.zremrangebyrank(key, start, end)
+        except Exception as e:
+            logger.error(f"Error removing range from sorted set: {e}")
+            return 0
     
     def flush(self) -> bool:
         """
