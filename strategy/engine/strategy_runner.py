@@ -487,6 +487,10 @@ class StrategyRunner:
                         limit=additional_candles_needed,
                         descending=True
                     )
+
+                    if not historical_candles:
+                        logger.debug(f"Failed to fetch historical candles for {symbol} {timeframe} from {source}")
+                        return None
                     
                     # Process historical candles and add them to historical_candle_dtos
                     historical_candle_dtos: List[CandleDto] = []
@@ -515,51 +519,44 @@ class StrategyRunner:
                         except (json.JSONDecodeError, TypeError, ValueError) as e:
                             logger.warning(f"Failed to decode historical candle JSON: {e}")
                             continue
-                    # Sort both sets of candles by timestamp
-                    # if historical_candle_dtos:
-                    #     # Sort historical candles (newest first since we retrieved them in descending order)
-                    #     historical_candle_dtos.sort(key=lambda x: x.timestamp if isinstance(x.timestamp, (int, float)) 
-                    #                 else datetime.fromisoformat(x.timestamp.replace('Z', '+00:00')).timestamp() 
-                    #                 if isinstance(x.timestamp, str) else 0, reverse=True)
+                    
+                    # Sort historical candles (newest first since we retrieved them in descending order)
+                    historical_candle_dtos.sort(key=lambda x: x.timestamp if isinstance(x.timestamp, (int, float)) 
+                                else datetime.fromisoformat(x.timestamp.replace('Z', '+00:00')).timestamp() 
+                                if isinstance(x.timestamp, str) else 0, reverse=True)
+                    
+                    # Sort live candles (oldest first)
+                    original_live_candles.sort(key=lambda x: x.timestamp if isinstance(x.timestamp, (int, float)) 
+                                else datetime.fromisoformat(x.timestamp.replace('Z', '+00:00')).timestamp() 
+                                if isinstance(x.timestamp, str) else 0)
                         
-                    #     # Sort live candles (oldest first)
-                    #     original_live_candles.sort(key=lambda x: x.timestamp if isinstance(x.timestamp, (int, float)) 
-                    #                 else datetime.fromisoformat(x.timestamp.replace('Z', '+00:00')).timestamp() 
-                    #                 if isinstance(x.timestamp, str) else 0)
-                        
-                    #     # Check for gap between latest historical and earliest live candle
-                    #     if historical_candle_dtos and original_live_candles:
-                    #         latest_historical = historical_candle_dtos[0]  # First is latest since we sorted in reverse
-                    #         earliest_live = original_live_candles[0]  # First is earliest since we sorted normally
+                    # Check for gap between latest historical and earliest live candle
+                    latest_historical = historical_candle_dtos[0]  # First is latest since we sorted in reverse
+                    earliest_live = original_live_candles[0]  # First is earliest since we sorted normally
+                    
+                    # Get timestamps
+                    hist_time = latest_historical.timestamp
+                    live_time = earliest_live.timestamp
+                    
+                    # Convert to float timestamp if it's a datetime
+                    if isinstance(hist_time, datetime):
+                        hist_time = hist_time.timestamp()
+                    if isinstance(live_time, datetime):
+                        live_time = live_time.timestamp()
                             
-                    #         # Get timestamps
-                    #         hist_time = latest_historical.timestamp
-                    #         live_time = earliest_live.timestamp
-                            
-                    #         # Convert to datetime if needed
-                    #         if isinstance(hist_time, str):
-                    #             hist_time = datetime.fromisoformat(hist_time.replace('Z', '+00:00'))
-                    #         if isinstance(live_time, str):
-                    #             live_time = datetime.fromisoformat(live_time.replace('Z', '+00:00'))
-                            
-                    #         # Convert to float timestamp if it's a datetime
-                    #         if isinstance(hist_time, datetime):
-                    #             hist_time = hist_time.timestamp()
-                    #         if isinstance(live_time, datetime):
-                    #             live_time = live_time.timestamp()
-                            
-                    #         # Calculate timeframe in seconds
-                    #         timeframe_seconds = self._timeframe_to_seconds(timeframe)
-                            
-                    #         # Check for gap: should be less than 2x the timeframe
-                    #         if (live_time - hist_time) > (2 * timeframe_seconds):
-                    #             logger.warning(f"Gap detected between historical and live candles for {symbol} {timeframe}. " 
-                    #                         f"Gap: {live_time - hist_time} seconds, expected less than {2 * timeframe_seconds} seconds")
-                    #             return None
+                    # Calculate timeframe in seconds
+                    timeframe_seconds = self._timeframe_to_seconds(timeframe)
+                    
+                    # Check for gap: should be less than 2x the timeframe
+                    if (live_time - hist_time) > (2 * timeframe_seconds):
+                        logger.warning(f"Gap detected between historical and live candles for {symbol} {timeframe}. " 
+                                    f"Gap: {live_time - hist_time} seconds, expected less than {2 * timeframe_seconds} seconds")
+                        return None
                         
                     #     # If gap check passes, add the needed historical candles to our main list
-                        needed_count = min(additional_candles_needed, len(historical_candle_dtos))
-                        candle_dtos.extend(historical_candle_dtos[:needed_count])
+                    needed_count = min(additional_candles_needed, len(historical_candle_dtos))
+                    candle_dtos.extend(historical_candle_dtos[:needed_count])
+                    
                     # Check again if we have enough candles after adding historical data
                     if len(candle_dtos) < max_lookback:
                         logger.warning(f"Still not enough candles after adding historical data for {symbol} {timeframe}. Found: {len(candle_dtos)}")
@@ -587,11 +584,6 @@ class StrategyRunner:
                 'source': source,
                 'last_updated': last_updated_info
             }
-            
-            # Update and add market structure if available
-            # if hasattr(self, 'market_structure') and self.market_structure:
-            #     market_context = await self.market_structure.update(data)
-            #     data['market_context'] = market_context
             
             # Update the last updated timestamp to the latest candle's timestamp
             latest_timestamp = latest_candle.timestamp
@@ -670,3 +662,19 @@ class StrategyRunner:
         except Exception as e:
             logger.error(f"Error publishing signal: {e}", exc_info=True)
             return False
+        
+    @staticmethod
+    def _timeframe_to_seconds(timeframe: str) -> int:
+        """
+        Convert timeframe string (e.g., "1h", "4h", "1d") to seconds.
+        
+        Args:
+            timeframe: Timeframe string
+            
+        Returns:
+            Timeframe duration in seconds
+        """
+        multipliers = {"m": 60, "h": 3600, "d": 86400}
+        unit = timeframe[-1]
+        value = int(timeframe[:-1])
+        return value * multipliers.get(unit, 0)
