@@ -199,6 +199,64 @@ class SignalRepository(BaseRepository[SignalModel]):
             self.session.rollback()
             self.logger.error(f"Error bulk upserting signals: {str(e)}")
             return 0
+        
+    async def create_signal(self, signal_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Create a new signal record in the database.
+        
+        Args:
+            signal_data: Dictionary containing signal data
+            
+        Returns:
+            Dictionary representation of the created signal, or None if creation failed
+        """
+        try:
+            # Convert dictionary to model
+            signal_model = SignalModel.from_dict(signal_data)
+            
+            # Add to session
+            self.session.add(signal_model)
+            self.session.commit()
+            
+            # Refresh to get updated values (like auto-generated ID)
+            self.session.refresh(signal_model)
+            
+            # Convert back to dictionary and return
+            return signal_model.to_dict()
+        except SQLAlchemyError as e:
+            self.session.rollback()
+            self.logger.error(f"Error creating signal: {str(e)}")
+            return None
+
+    async def bulk_create_signals(self, signals_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Create multiple signals in a single transaction.
+        
+        Args:
+            signals_data: List of dictionaries containing signal data
+            
+        Returns:
+            List of created signals as dictionaries
+        """
+        created_signals = []
+        try:
+            # Convert dictionaries to models
+            signal_models = [SignalModel.from_dict(data) for data in signals_data]
+            
+            # Add all to session
+            self.session.add_all(signal_models)
+            self.session.commit()
+            
+            # Refresh to get updated values
+            for model in signal_models:
+                self.session.refresh(model)
+                created_signals.append(model.to_dict())
+                
+            return created_signals
+        except SQLAlchemyError as e:
+            self.session.rollback()
+            self.logger.error(f"Error bulk creating signals: {str(e)}")
+            return []
     
     def _to_domain(self, db_obj: SignalModel) -> SignalDto:
         """
