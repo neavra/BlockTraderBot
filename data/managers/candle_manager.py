@@ -15,6 +15,7 @@ from shared.queue.queue_service import QueueService
 
 from .base import BaseManager
 from shared.domain.dto.candle_dto import CandleDto
+from shared.domain.types.source_type_enum import SourceTypeEnum
 from data.normalizer.factory import NormalizerFactory
 from shared.domain.events.candle_closed_event import CandleClosedEvent
 
@@ -207,7 +208,7 @@ class CandleManager(BaseManager):
             # Process standard timeframe candle
             market_key = f"{normalized_candle.exchange}:{normalized_candle.symbol}:{normalized_candle.timeframe}"
             historical_done = self.historical_complete.get(market_key, False)
-            await self._process_standard_candle(normalized_candle, normalizer, "live", historical_done)
+            await self._process_standard_candle(normalized_candle, normalizer, SourceTypeEnum.LIVE, historical_done)
             
             # Process custom timeframes if enabled
             # if self.custom_timeframes_enabled:
@@ -249,7 +250,7 @@ class CandleManager(BaseManager):
                 
                 # Process standard timeframe candle only if closed, ignore opened candles
                 if normalized_candle.is_closed:
-                    await self._process_standard_candle(normalized_candle, normalizer, "historical")
+                    await self._process_standard_candle(normalized_candle, normalizer, SourceTypeEnum.HISTORICAL)
                     
                 
                 # Process custom timeframes if enabled
@@ -277,7 +278,7 @@ class CandleManager(BaseManager):
         )
         self.logger.debug("Successfully stored closed candle to cache")
 
-    async def _process_standard_candle(self, normalized_candle: CandleDto, normalizer: Normalizer, source: str, historical_done: bool = False) -> None:
+    async def _process_standard_candle(self, normalized_candle: CandleDto, normalizer: Normalizer, source: SourceTypeEnum, historical_done: bool = False) -> None:
         """
         Process a standard timeframe candle.
         Store it in the database and publish events.
@@ -299,7 +300,7 @@ class CandleManager(BaseManager):
                 routing_key=RoutingKeys.CANDLE_ALL, 
                 message=normalized_candle_json
             )
-        if source == 'historical':
+        if source == SourceTypeEnum.HISTORICAL:
             candle_event = CandleClosedEvent.to_event(normalized_candle, source)
             self.producer_event_queue.publish(
                 exchange=Exchanges.MARKET_DATA, 
@@ -313,7 +314,7 @@ class CandleManager(BaseManager):
                 timeframe=normalized_candle.timeframe
             )
         # No matter what need to cache both live and historical.But only publish live events once historical data is caught up
-        elif source == 'live':
+        elif source == SourceTypeEnum.LIVE:
             cache_key = CacheKeys.CANDLE_LIVE_WEBSOCKET_DATA.format(
                     exchange=normalized_candle.exchange,
                     symbol=normalized_candle.symbol,

@@ -12,6 +12,7 @@ from shared.domain.dto.signal_dto import SignalDto
 from shared.queue.queue_service import QueueService
 from shared.cache.cache_service import CacheService
 from shared.domain.dto.candle_dto import CandleDto
+from shared.domain.types.source_type_enum import SourceTypeEnum
 from strategy.indicators.base import Indicator
 from shared.constants import Exchanges, Queues, RoutingKeys, CacheKeys, CacheTTL
 from strategy.domain.models.market_context import MarketContext
@@ -195,7 +196,7 @@ class StrategyRunner:
             logger.debug(f"Received candle event: {event.get('symbol')} {event.get('timeframe')}")
             
             # Determine the event source, default to live
-            event_source = event.get('source', 'live')
+            event_source = event.get('source', SourceTypeEnum.LIVE)
             
             # Schedule strategy execution in the background
             # This allows us to react to new market data immediately
@@ -207,7 +208,7 @@ class StrategyRunner:
         except Exception as e:
             logger.error(f"Error processing candle event: {e}")
     
-    async def _execute_on_event(self, event: Dict[str, Any], source: str):
+    async def _execute_on_event(self, event: Dict[str, Any], source: SourceTypeEnum):
         """
         Execute strategies based on a candle event.
 
@@ -242,7 +243,7 @@ class StrategyRunner:
                 return
 
             # Execute all applicable strategies with this data
-            await self.execute_strategies(candle_data, market_contexts)
+            await self.execute_strategies(candle_data, market_contexts, source)
             
             # Process mitigation after strategy execution
             await self.execute_mitigation(candle_data)
@@ -282,7 +283,7 @@ class StrategyRunner:
         except Exception as e:
             logger.error(f"Error executing mitigation: {e}", exc_info=True)
 
-    async def execute_strategies(self, candle_data: List[CandleDto], market_contexts: List[MarketContext]):
+    async def execute_strategies(self, candle_data: List[CandleDto], market_contexts: List[MarketContext], source: SourceTypeEnum):
         """
         Execute all applicable strategies with the provided market data
         
@@ -323,19 +324,22 @@ class StrategyRunner:
                     #     continue
                         
                     # Execute the strategy with enhanced data
-                    signal = await strategy.analyze(indicator_results)
-                    
-                    # If a signal was generated, publish it
-                    if signal:
-                        await self._publish_signal(signal)
-                        logger.info(f"Generated signal from {strategy.name} for {candle_data.get('symbol')} ({candle_data.get('timeframe')})")
+                    if source == SourceTypeEnum.LIVE:
+                        signal = await strategy.analyze(indicator_results)
+                        
+                        # If a signal was generated, publish it
+                        if signal:
+                            await self._publish_signal(signal)
+                            logger.info(f"Generated signal from {strategy.name} for {candle_data.get('symbol')} ({candle_data.get('timeframe')})")
+                    else:
+                        logger.info(f"Skip signal generation, currently handling historical data, source = {source}")
                 except Exception as e:
                     logger.error(f"Error executing strategy {strategy.name}: {e}", exc_info=True)
         
         except Exception as e:
             logger.error(f"Error in strategy execution: {e}", exc_info=True)
 
-    async def _get_market_data_by_source(self, exchange:str, symbol: str, timeframe: str, source: str) -> Optional[List[CandleDto]]:
+    async def _get_market_data_by_source(self, exchange:str, symbol: str, timeframe: str, source: SourceTypeEnum) -> Optional[List[CandleDto]]:
         """
         Retrieve market data based on the source type.
         Uses the last updated timestamp to get candles after that time from the appropriate
@@ -351,7 +355,7 @@ class StrategyRunner:
         """
         try:
             # Build the cache keys based on source
-            if source == 'historical':
+            if source == SourceTypeEnum.HISTORICAL:
                 # For historical data, use the historical candle set
                 candles_sorted_set_key = CacheKeys.CANDLE_HISTORY_REST_API_DATA.format(
                     exchange=exchange,
@@ -462,7 +466,7 @@ class StrategyRunner:
                 max_lookback = max(max_lookback, strategy_lookback)
             
             if max_lookback > candle_dtos:
-                if source == 'live':
+                if source == SourceTypeEnum.LIVE:
                     # If it's live data and we don't have enough candles,
                     # try to get historical candles to supplement
                     logger.info(f"Not enough live candles for {symbol} {timeframe}. Found: {len(candle_dtos)}, getting historical data")
@@ -556,7 +560,7 @@ class StrategyRunner:
                     #     # If gap check passes, add the needed historical candles to our main list
                     needed_count = min(additional_candles_needed, len(historical_candle_dtos))
                     candle_dtos.extend(historical_candle_dtos[:needed_count])
-                    
+
                     # Check again if we have enough candles after adding historical data
                     if len(candle_dtos) < max_lookback:
                         logger.warning(f"Still not enough candles after adding historical data for {symbol} {timeframe}. Found: {len(candle_dtos)}")
