@@ -23,7 +23,7 @@ class Strategy(ABC):
         self.params = params or {}
         
     @abstractmethod
-    async def analyze(self, data: Dict[str, Any]) -> Optional[SignalDto]:
+    async def analyze(self, data: Dict[str, Any]) -> Optional[List[SignalDto]]:
         """
         Analyze market data and generate signals if conditions are met
         

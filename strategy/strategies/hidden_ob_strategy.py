@@ -1,5 +1,5 @@
 # strategy/strategies/hidden_order_block_strategy.py
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from strategy.strategies.base import Strategy
 from strategy.indicators.base import Indicator
 from shared.domain.dto.signal_dto import SignalDto
@@ -38,7 +38,7 @@ class HiddenOrderBlockStrategy(Strategy):
         
         super().__init__("HiddenOrderBlock", indicators, default_params)
     
-    async def analyze(self, data: Dict[str, Any]) -> Optional[SignalDto]:
+    async def analyze(self, data: Dict[str, Any]) -> Optional[List[SignalDto]]:
         """
         Analyze market data for Hidden Order Block setup
         

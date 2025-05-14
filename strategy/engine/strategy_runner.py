@@ -16,6 +16,8 @@ from shared.domain.types.source_type_enum import SourceTypeEnum
 from strategy.indicators.base import Indicator
 from shared.constants import Exchanges, Queues, RoutingKeys, CacheKeys, CacheTTL
 from strategy.domain.models.market_context import MarketContext
+from data.database.db import Database
+from data.database.repository.signal_repository import SignalRepository
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +38,7 @@ class StrategyRunner:
         producer_queue: QueueService,
         consumer_queue: QueueService,
         context_engine: ContextEngine,
+        database: Database,
         config: Dict[str, Any]
     ):
         """
@@ -49,6 +52,9 @@ class StrategyRunner:
             config: Configuration dictionary
         """
         self.strategies = strategies
+        self.database = Database
+        session = self.database.get_session()
+        self.signal_repository = SignalRepository(session=session)
         self.context_engine =context_engine
         # Holds Candle Data
         self.cache_service = cache_service
@@ -324,15 +330,26 @@ class StrategyRunner:
                     #     continue
                         
                     # Execute the strategy with enhanced data
-                    if source == SourceTypeEnum.LIVE:
-                        signal = await strategy.analyze(indicator_results)
+                    signals = await strategy.analyze(indicator_results)
+                    
+                    # If a signal was generated, publish it and save to database
+                    if signals:
+                        # Publish signal to message queue
+                        if source == SourceTypeEnum.LIVE:
+                            for signal in signals:
+                                # Publish each signal to message queue
+                                await self._publish_signal(signal)
+                        else:
+                            logger.info(f"Skip signal generation, currently handling historical data, source = {source}")
+                        # Prepare signals for database operations
+                        signal_dict = [signal.to_dict() for signal in signals]
+                        # Save signal to database
+                        saved_signal = await self.signal_repository.bulk_create_signals(signal_dict)
                         
-                        # If a signal was generated, publish it
-                        if signal:
-                            await self._publish_signal(signal)
-                            logger.info(f"Generated signal from {strategy.name} for {candle_data.get('symbol')} ({candle_data.get('timeframe')})")
-                    else:
-                        logger.info(f"Skip signal generation, currently handling historical data, source = {source}")
+                        if saved_signal:
+                            logger.info(f"Saved signal to database: ID {saved_signal.get('id')}")
+                        else:
+                            logger.warning(f"Failed to save signal to database")                                                  
                 except Exception as e:
                     logger.error(f"Error executing strategy {strategy.name}: {e}", exc_info=True)
         

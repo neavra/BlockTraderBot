@@ -194,6 +194,7 @@ class StrategyService:
                 producer_queue=self.producer_queue,
                 consumer_queue=self.consumer_queue,
                 context_engine=self.context_engine,
+                database=self.database,
                 config=self.config.get('strategy', {})
             )
             
