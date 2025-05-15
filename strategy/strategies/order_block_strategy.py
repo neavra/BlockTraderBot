@@ -34,7 +34,9 @@ class OrderBlockStrategy(Strategy):
             'strength_threshold': 0.7,
             'max_signals_per_day': 3,
             'stop_loss_pct': 0.02,
-            'entry_buffer_pct': 0.005
+            'entry_buffer_pct': 0.005,
+            'max_position_size': 10,
+            'account_size': 1000,
         }
         
         if params:
@@ -202,6 +204,7 @@ class OrderBlockStrategy(Strategy):
 
     def _calculate_position_size(self, entry_price, stop_loss, risk_percentage):
         """Calculate position size based on risk management rules"""
+        # TODO, finish logic for account size tracking
         account_size = self.params['account_size']
         risk_amount = account_size * risk_percentage
         
@@ -282,27 +285,6 @@ class OrderBlockStrategy(Strategy):
                 'price_range': [getattr(order_block, 'price_low', 0), getattr(order_block, 'price_high', 0)]
             }
         )
-
-    # def calculate_swing_proximity(order_block: OrderBlockDto, market_contexts: List[MarketContext]):
-    #     # Get swing high and low from market context
-    #     swing_high = market_context.swing_high.get('price')
-    #     swing_low = market_context.swing_low.get('price')
-        
-    #     # For demand (bullish) order blocks, proximity to swing low matters more
-    #     if order_block.type == 'demand':
-    #         # Calculate distance as percentage of price
-    #         distance = abs(order_block.price_low - swing_low) / swing_low
-    #         # Convert to proximity (closer = higher score)
-    #         proximity = max(0, 1 - min(distance / 0.05, 1))  # Within 5% is full strength
-        
-    #     # For supply (bearish) order blocks, proximity to swing high matters more
-    #     else:
-    #         # Calculate distance as percentage of price
-    #         distance = abs(order_block.price_high - swing_high) / swing_high
-    #         # Convert to proximity (closer = higher score)
-    #         proximity = max(0, 1 - min(distance / 0.05, 1))  # Within 5% is full strength
-        
-    #     return proximity
 
     def calculate_swing_proximity(self, order_block: OrderBlockDto, market_contexts: List[MarketContext]):
         """
