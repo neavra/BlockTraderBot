@@ -118,7 +118,7 @@ class OrderBlockIndicator(Indicator):
         # Detect order blocks based on composite analysis with the specific sequence:
         # Doji candle -> FVG -> BOS
         demand_blocks, supply_blocks = self._detect_order_blocks(
-            candles, doji_candles, bullish_fvgs, bearish_fvgs, bullish_bos, bearish_bos
+            timeframe, symbol, exchange, candles, doji_candles, bullish_fvgs, bearish_fvgs, bullish_bos, bearish_bos
         )
         
         # Sort blocks by index (most recent first)
@@ -180,6 +180,9 @@ class OrderBlockIndicator(Indicator):
         )
     
     def _detect_order_blocks(self, 
+                             timeframe: str,
+                             symbol: str,
+                             exchange,
                              candles: List[CandleDto],
                              doji_candles: List[DojiDto],
                              bullish_fvgs: List[FvgDto],
@@ -260,6 +263,9 @@ class OrderBlockIndicator(Indicator):
                         timestamp = doji_candle.timestamp
                         
                         demand_block = OrderBlockDto(
+                            timeframe=timeframe,
+                            symbol=symbol,
+                            exchange=exchange,
                             type='demand',
                             price_high=doji_candle.open,
                             price_low=doji_candle.close,
@@ -316,6 +322,9 @@ class OrderBlockIndicator(Indicator):
                         timestamp = doji_candle.timestamp
                         
                         supply_block = OrderBlockDto(
+                            timeframe=timeframe,
+                            symbol=symbol,
+                            exchange=exchange,
                             type='supply',
                             price_high=doji_candle.close,
                             price_low=doji_candle.open,

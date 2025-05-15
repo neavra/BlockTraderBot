@@ -11,6 +11,9 @@ from strategy.domain.dto.doji_dto import DojiDto
 @dataclass
 class OrderBlockDto:
     """Order Block data transfer object for a single order block"""
+    timeframe: str
+    symbol: str
+    exchange: str
     type: str  # 'demand' or 'supply'
     price_high: float
     price_low: float
@@ -24,6 +27,7 @@ class OrderBlockDto:
     status: str # 'active', 'mitigated'
     touched: bool
     mitigation_percentage: float
+    strength: float
     created_at:datetime
     
     @property
