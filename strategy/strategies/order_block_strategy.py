@@ -7,6 +7,12 @@ from strategy.domain.types.indicator_type_enum import IndicatorType
 from strategy.domain.dto.strength_dto import StrengthDto
 from strategy.domain.dto.order_block_dto import OrderBlockDto, OrderBlockResultDto
 from strategy.domain.types.time_frame_enum import TIMEFRAME_HIERARCHY
+from data.database.repository.order_block_repository import OrderBlockRepository
+
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 class OrderBlockStrategy(Strategy):
     """
@@ -42,6 +48,10 @@ class OrderBlockStrategy(Strategy):
         for indicator_name in required_indicators:
             if indicator_name not in indicators:
                 raise ValueError(f"Missing required indicator: {indicator_name}")
+        
+        self.order_block_repository = indicators.get(IndicatorType.ORDER_BLOCK.name).repository
+        if not self.order_block_repository:
+            raise ValueError(f"Unable to get repository from Order Block Indicator")
         
         super().__init__("OrderBlock", indicators, default_params)
 
@@ -525,40 +535,100 @@ class OrderBlockStrategy(Strategy):
         
         return final_score
     
-    def calculate_mtf_confluence(self, order_block: OrderBlockDto, all_order_blocks: List[OrderBlockDto]):
+    async def calculate_mtf_confluence(self, order_block: OrderBlockDto, local_order_blocks: List[OrderBlockDto]):
+        """
+        Calculate multi-timeframe confluence score for an order block by finding
+        overlapping order blocks from higher timeframes in the database.
+        
+        Args:
+            order_block: The order block to evaluate
+            local_order_blocks: Local set of order blocks from current analysis
+            
+        Returns:
+            Confluence score between 0.0 and 1.0
+        """
         # Get current order block's price range
         ob_high = order_block.price_high
         ob_low = order_block.price_low
         ob_timeframe = order_block.timeframe
+        ob_symbol = order_block.symbol
+        ob_exchange = order_block.exchange
         
-        # Count overlapping order blocks from higher timeframes
-        overlap_count = 0
-        higher_timeframes = ['1h', '4h', '1d', '1w'] # Define your timeframe hierarchy
-        current_tf_index = higher_timeframes.index(ob_timeframe) if ob_timeframe in higher_timeframes else -1
+        # Get list of higher timeframes to check from TIMEFRAME_HIERARCHY
+        higher_timeframes = TIMEFRAME_HIERARCHY.get(ob_timeframe, [])
+        if not higher_timeframes:
+            return 0.0  # No higher timeframes to check
         
-        for other_ob in all_order_blocks:
-            # Skip if same order block or lower timeframe
-            other_tf = other_ob.timeframe
-            other_tf_index = higher_timeframes.index(other_tf) if other_tf in higher_timeframes else -1
+        try:
+            # Find min/max price range across all local order blocks to expand search range
+            all_highs = [ob.price_high for ob in local_order_blocks]
+            all_lows = [ob.price_low for ob in local_order_blocks]
             
-            if other_tf_index <= current_tf_index:
-                continue
-                
-            # Check for price overlap
-            overlap = (
-                (ob_low <= other_ob.price_high and ob_high >= other_ob.price_low) or
-                (other_ob.price_low <= ob_high and other_ob.price_high >= ob_low)
+            # Add current order block's range
+            all_highs.append(ob_high)
+            all_lows.append(ob_low)
+            
+            # Calculate expanded price range with a buffer (10%)
+            min_price = min(all_lows) * 0.9
+            max_price = max(all_highs) * 1.1
+            
+            # Query repository for active order blocks in higher timeframes within price range
+            mtf_order_blocks = await self.order_block_repository.find_active_indicators_in_price_range(
+                exchange=ob_exchange,
+                symbol=ob_symbol,
+                min_price=min_price,
+                max_price=max_price,
+                timeframes=higher_timeframes
             )
             
-            if overlap:
-                # Higher timeframe confluences are more valuable
-                tf_weight = (other_tf_index - current_tf_index) / len(higher_timeframes)
-                overlap_count += (1 + tf_weight)
-        
-        # Normalize the overlap count (max expected value is 3)
-        mtf_score = min(overlap_count / 3, 1.0)
-        
-        return mtf_score
+            # Convert to DTOs if necessary
+            mtf_order_blocks = [OrderBlockDto.from_dict(ob) if isinstance(ob, dict) else ob 
+                            for ob in mtf_order_blocks]
+            
+            # Count overlapping order blocks from higher timeframes with weighted scoring
+            overlap_score = 0.0
+            max_possible_score = 0.0
+            
+            for other_ob in mtf_order_blocks:
+                # Skip if not in higher timeframes list
+                if other_ob.timeframe not in higher_timeframes:
+                    continue
+                # Calculate weight based on position in the hierarchy
+                # Higher timeframes get higher weights
+                tf_index = higher_timeframes.index(other_ob.timeframe)
+                tf_position = tf_index / max(1, len(higher_timeframes) - 1)
+                tf_weight = 0.4 + 0.6 * (tf_position ** 2)
+
+                max_possible_score += tf_weight
+
+                # Calculate price overlap percentage
+                overlap_low = max(ob_low, other_ob.price_low)
+                overlap_high = min(ob_high, other_ob.price_high)
+
+                if overlap_high > overlap_low:
+                    current_range = ob_high - ob_low
+                    other_range = other_ob.price_high - other_ob.price_low
+                    overlap_range = overlap_high - overlap_low
+
+                    reference_range = min(current_range, other_range)
+                    overlap_percentage = overlap_range / reference_range if reference_range > 0 else 0
+
+                    overlap_score += tf_weight * overlap_percentage
+
+                    # Add weighted score based on timeframe and overlap
+                    overlap_score += (1.0 + tf_weight) * overlap_percentage
+            
+            # Normalize the overlap score (cap at 1.0)
+            if max_possible_score > 0:
+                mtf_score = min(overlap_score / max_possible_score, 1.0)
+            else:
+                mtf_score = 0.0
+            
+            return mtf_score
+            
+        except Exception as e:
+            logger.error(f"Error calculating multi-timeframe confluence: {e}")
+            return 0.0
     
     def get_requirements(self) -> Dict[str, Any]:
         """
