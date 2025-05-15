@@ -6,19 +6,7 @@ from strategy.domain.models.market_context import MarketContext
 from strategy.domain.types.indicator_type_enum import IndicatorType
 from strategy.domain.dto.strength_dto import StrengthDto
 from strategy.domain.dto.order_block_dto import OrderBlockDto, OrderBlockResultDto
-
-TIMEFRAME_HIERARCHY: Dict[str, List[str]] = {
-        "1m": ["1m", "5m", "15m"],
-        "5m": ["5m", "15m", "1h"],
-        "15m": ["15m", "1h", "4h"],
-        "30m": ["30m", "1h", "4h"],
-        "1h": ["1h", "4h", "1d"],
-        "2h": ["2h", "4h", "1d"],
-        "4h": ["4h", "1d", "1w"],
-        "1d": ["1d", "1w"],
-        "1w": ["1w", "1M"],
-        "1M": ["1M"]
-    }
+from strategy.domain.types.time_frame_enum import TIMEFRAME_HIERARCHY
 
 class OrderBlockStrategy(Strategy):
     """

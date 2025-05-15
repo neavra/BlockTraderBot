@@ -11,21 +11,9 @@ from shared.cache.cache_service import CacheService
 from shared.domain.dto.candle_dto import CandleDto
 from data.database.db import Database
 from data.database.repository.market_context_repository import MarketContextRepository
+from strategy.domain.types.time_frame_enum import TIMEFRAME_HIERARCHY
 
 logger = logging.getLogger(__name__)
-
-TIMEFRAME_HIERARCHY: Dict[str, List[str]] = {
-        "1m": ["1m", "5m", "15m"],
-        "5m": ["5m", "15m", "1h"],
-        "15m": ["15m", "1h", "4h"],
-        "30m": ["30m", "1h", "4h"],
-        "1h": ["1h", "4h", "1d"],
-        "2h": ["2h", "4h", "1d"],
-        "4h": ["4h", "1d", "1w"],
-        "1d": ["1d", "1w"],
-        "1w": ["1w", "1M"],
-        "1M": ["1M"]
-    }
 
 class ContextEngine:
     """

@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import List, Dict
 
 class TimeframeCategoryEnum(Enum):
     """Categorization of timeframes based on duration"""
@@ -31,6 +32,19 @@ _TIMEFRAME_CATEGORIES = {
     "1m": TimeframeCategoryEnum.LTF
 }
 
+# Constant: timeframe hierarchy
+TIMEFRAME_HIERARCHY: Dict[str, List[str]] = {
+    "1m": ["1m", "5m", "15m"],
+    "5m": ["5m", "15m", "1h"],
+    "15m": ["15m", "1h", "4h"],
+    "30m": ["30m", "1h", "4h"],
+    "1h": ["1h", "4h", "1d"],
+    "2h": ["2h", "4h", "1d"],
+    "4h": ["4h", "1d", "1w"],
+    "1d": ["1d", "1w"],
+    "1w": ["1w", "1M"],
+    "1M": ["1M"]
+}
 
 def get_timeframe_category(timeframe: str) -> TimeframeCategoryEnum:
     """
