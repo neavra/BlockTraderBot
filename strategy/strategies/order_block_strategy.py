@@ -143,7 +143,7 @@ class OrderBlockStrategy(Strategy):
             )
 
             # Validate signal
-            if self._validate_signal(signal, market_contexts):
+            if self.validate_signal(signal):
                 signals.append(signal)
 
         # Process supply (bearish) order blocks
@@ -196,7 +196,7 @@ class OrderBlockStrategy(Strategy):
                 }
             )
 
-            if self._validate_signal(signal, market_contexts):
+            if self.validate_signal(signal):
                 signals.append(signal)
         
         return signals
@@ -219,26 +219,63 @@ class OrderBlockStrategy(Strategy):
         
         return position_size
 
-    def _validate_signal(self, signal, market_context):
-        """Validate if a signal should be executed"""
-        # Check for existing active signals on this symbol
-        # active_signals = self._get_active_signals(signal.symbol)
-        # if len(active_signals) >= self.params['max_signals_per_symbol']:
-        #     return False
+    def validate_signal(self, signal: SignalDto) -> bool:
+        """
+        Validate if a signal should be executed based on structural integrity,
+        risk parameters, and existing market conditions. Take note actual check on whether this 
+        signal is worth trading is done at the execution level.
         
-        # # Check for trend alignment (optional)
-        # if self.params.get('require_trend_alignment', False):
-        #     trend = market_context.trend
-        #     if (signal.direction == 'long' and trend != 'up') or \
-        #     (signal.direction == 'short' and trend != 'down'):
-        #         return False
+        Args:
+            signal: The signal to validate
+            market_context: Current market context information
+            
+        Returns:
+            True if the signal is valid and should be executed, False otherwise
+        """
+        # 1. Data structure validation - ensure required fields exist
+        if not signal.symbol or not signal.exchange or not signal.timeframe:
+            logger.warning(f"Signal missing required fields: {signal}")
+            return False
         
-        # # Check for minimum R:R ratio
-        # min_rr = self.params.get('min_risk_reward_ratio', 1.5)
-        # if signal.risk_reward_ratio < min_rr:
-        #     return False
+        if signal.direction not in ['long', 'short']:
+            logger.warning(f"Invalid signal direction: {signal.direction}")
+            return False
         
+        # 2. Price targets validation
+        if signal.price_target is None:
+            logger.warning("Signal missing entry price target")
+            return False
         
+        if signal.stop_loss is None:
+            logger.warning("Signal missing stop loss price")
+            return False
+        
+        if signal.take_profit is None:
+            logger.warning("Signal missing take profit price")
+            return False
+
+        # 3. Logical Price check
+        min_rr = self.params.get('min_risk_reward_ratio', 1.5)
+        if not signal.risk_reward_ratio:
+            # Calculate R:R if not provided
+            if signal.direction == 'long':
+                risk = abs(signal.price_target - signal.stop_loss)
+                reward = abs(signal.take_profit - signal.price_target)
+            else:  # short
+                risk = abs(signal.stop_loss - signal.price_target)
+                reward = abs(signal.price_target - signal.take_profit)
+            
+            if risk == 0:
+                logger.warning("Invalid signal: Risk is zero")
+                return False
+                
+            calculated_rr = reward / risk
+            signal.risk_reward_ratio = calculated_rr
+        
+        if signal.risk_reward_ratio < min_rr:
+            logger.info(f"Signal R:R ratio {signal.risk_reward_ratio:.2f} below minimum {min_rr}")
+            return False
+
         return True
     
     def calculate_strength(self, order_block: OrderBlockDto, market_contexts: List[MarketContext], all_order_blocks: List[OrderBlockDto]) -> StrengthDto:
