@@ -26,7 +26,9 @@ class OrderBlockStrategy(Strategy):
         default_params = {
             'risk_reward_ratio': 2.0,
             'strength_threshold': 0.7,
-            'max_signals_per_day': 3
+            'max_signals_per_day': 3,
+            'stop_loss_pct': 0.02,
+            'entry_buffer_pct': 0.005
         }
         
         if params:
@@ -90,13 +92,10 @@ class OrderBlockStrategy(Strategy):
             if block.strength < self.params['strength_threshold']:
                 continue
             
-            # Calculate trigger price (slightly above the order block)
-            trigger_price = block.price_low * 0.995  # 0.5% below low
-            
-            # Calculate stop loss (below the order block low)
-            stop_loss = block.price_low * 0.98  # 2% below low
-            
-            # Calculate take profit based on risk:reward ratio
+            entry_buffer = self.params.get('entry_buffer_pct', 0.005)
+            trigger_price = block.price_low * (1 - entry_buffer)
+            stop_loss_pct = self.params.get('stop_loss_pct', 0.02)
+            stop_loss = block.price_low * (1 - stop_loss_pct)
             risk = current_price - stop_loss
             take_profit = current_price + (risk * self.params['risk_reward_ratio'])
             
@@ -130,18 +129,66 @@ class OrderBlockStrategy(Strategy):
                     }
                 }
             )
-            
+
             # Validate signal
             if self._validate_signal(signal, market_contexts):
                 signals.append(signal)
-        
+
         # Process supply (bearish) order blocks
-        # for block in supply_blocks:
-        #     # Similar processing as demand blocks, but for short positions
-        #     # ...
+        for block in supply_blocks:
+            if block.status != 'active':
+                continue
             
+            results: StrengthDto = self.calculate_strength(block, market_contexts, demand_blocks + supply_blocks)
+            block.strength = results.overall_score
+            swing_score = results.swing_proximity
+            fib_score = results.fib_confluence
+            mtf_score = results.mtf_confluence
+            
+            if block.strength < self.params['strength_threshold']:
+                continue
+            
+            entry_buffer = self.params.get('entry_buffer_pct', 0.005)
+            trigger_price = block.price_low * (1 + entry_buffer)
+            stop_loss_pct = self.params.get('stop_loss_pct', 0.02)
+            stop_loss = block.price_high * (1 + stop_loss_pct)
+            risk = stop_loss - current_price
+            take_profit = current_price - (risk * self.params['risk_reward_ratio'])
+
+            position_size = self._calculate_position_size(
+                current_price, stop_loss, self.params['risk_per_trade']
+            )
+
+            signal = SignalDto(
+                strategy_name=self.name,
+                exchange=data.get('exchange'),
+                symbol=data.get('symbol'),
+                timeframe=data.get('timeframe'),
+                direction='short',
+                signal_type='entry',
+                price_target=trigger_price,
+                stop_loss=stop_loss,
+                take_profit=take_profit,
+                risk_reward_ratio=self.params['risk_reward_ratio'],
+                confidence_score=block.strength,
+                execution_status='pending',
+                metadata={
+                    'order_block_high': block.price_high,
+                    'order_block_low': block.price_low,
+                    'position_size': position_size,
+                    'strength_details': {
+                        'swing_proximity': swing_score,
+                        'fib_confluence': fib_score,
+                        'mtf_confluence': mtf_score
+                    }
+                }
+            )
+
+            if self._validate_signal(signal, market_contexts):
+                signals.append(signal)
         
         return signals
+
 
     def _calculate_position_size(self, entry_price, stop_loss, risk_percentage):
         """Calculate position size based on risk management rules"""
@@ -419,6 +466,17 @@ class OrderBlockStrategy(Strategy):
                             level_weight = 0.95  # Midpoint
                         elif abs(level_value - 0.382) < 0.001:
                             level_weight = 0.9  # Also important
+
+                    elif level_type == 'extension':
+                        # Key extension levels
+                        if abs(level_value - 1.618) < 0.001:
+                            level_weight = 1.0  # Golden ratio extension
+                        elif abs(level_value - 1.272) < 0.001:
+                            level_weight = 0.95  # Square root of 1.618
+                        elif abs(level_value - 2.0) < 0.001:
+                            level_weight = 0.9  # 2x extension
+                        elif abs(level_value - 2.618) < 0.001:
+                            level_weight = 0.85  # 1.618 x 1.618
                     
                     # Perfect confluence
                     level_confluence = 1.0 * level_weight
