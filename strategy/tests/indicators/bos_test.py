@@ -429,6 +429,178 @@ class TestStructureBreakIndicator(unittest.TestCase):
                     self.assertEqual(result.latest_break, most_recent_break)
             
         asyncio.run(run_test())
+
+    def test_multi_timeframe_detection(self):
+        """Test BOS detection across multiple timeframes."""
+        async def run_test():
+            # Create multiple market contexts for different timeframes
+            # First context has NO valid swing points
+            context_1h = MarketContext(symbol="BTCUSDT", timeframe="1h")
+            # Not setting swing points for this one
+            
+            # Second context has valid swing points
+            context_4h = MarketContext(symbol="BTCUSDT", timeframe="4h")
+            context_4h.swing_high = {
+                'price': 105.0,
+                'index': 3,
+                'timestamp': datetime(2023, 1, 1, 3, 0, tzinfo=timezone.utc).isoformat()
+            }
+            context_4h.swing_low = {
+                'price': 95.0,
+                'index': 5,
+                'timestamp': datetime(2023, 1, 1, 5, 0, tzinfo=timezone.utc).isoformat()
+            }
+            
+            # Third context also has valid swing points but should not be used
+            # if breaks are found in context_4h
+            context_1d = MarketContext(symbol="BTCUSDT", timeframe="1d")
+            context_1d.swing_high = {
+                'price': 110.0,
+                'index': 2,
+                'timestamp': datetime(2023, 1, 1, 2, 0, tzinfo=timezone.utc).isoformat()
+            }
+            context_1d.swing_low = {
+                'price': 90.0,
+                'index': 4,
+                'timestamp': datetime(2023, 1, 1, 4, 0, tzinfo=timezone.utc).isoformat()
+            }
+            
+            # Test data with all three contexts
+            data = self.data.copy()
+            data["candles"] = self.hh_candles
+            data["market_contexts"] = [context_1h, context_4h, context_1d]
+            
+            # Monitor which contexts get checked by patching the _detect_breaks method
+            original_detect_breaks = self.indicator._detect_breaks
+            detect_breaks_calls = []
+            
+            def mock_detect_breaks(*args, **kwargs):
+                # Record the swing values used in the call
+                swing_high_price = args[1]
+                swing_low_price = args[2]
+                detect_breaks_calls.append((swing_high_price, swing_low_price))
+                return original_detect_breaks(*args, **kwargs)
+            
+            self.indicator._detect_breaks = mock_detect_breaks
+            
+            # Run the indicator
+            result = await self.indicator.calculate(data)
+            
+            # Restore original method
+            self.indicator._detect_breaks = original_detect_breaks
+            
+            # Verify results
+            self.assertIsInstance(result, StructureBreakResultDto)
+            
+            # We should have detected breaks
+            all_breaks = result.bullish_breaks + result.bearish_breaks
+            self.assertGreater(len(all_breaks), 0, "No breaks detected with valid contexts")
+            
+            # Verify we skipped the first context (which had no swing points)
+            # and used the second context (4h timeframe)
+            self.assertEqual(len(detect_breaks_calls), 1, 
+                            "Should have checked exactly one context (skipping first, stopping after second)")
+            
+            # Verify we used the swing values from the 4h context
+            used_swing_high, used_swing_low = detect_breaks_calls[0]
+            self.assertEqual(used_swing_high, 105.0, "Used wrong swing high value")
+            self.assertEqual(used_swing_low, 95.0, "Used wrong swing low value")
+            
+        asyncio.run(run_test())
+
+    def test_higher_timeframe_fallback(self):
+        """Test fallback to higher timeframe when no breaks found in lower timeframes."""
+        async def run_test():
+            # Create test candles where no breaks will be detected with first two contexts
+            no_breaks_candles = self.no_bos_candles.copy()
+            
+            # Create multiple market contexts for different timeframes
+            # First context has valid swing points, but positioned so no breaks will be detected
+            context_1h = MarketContext(symbol="BTCUSDT", timeframe="1h")
+            context_1h.swing_high = {
+                'price': 110.0,  # Much higher than any price in our candles
+                'index': 3,
+                'timestamp': datetime(2023, 1, 1, 3, 0, tzinfo=timezone.utc).isoformat()
+            }
+            context_1h.swing_low = {
+                'price': 90.0,   # Much lower than any price in our candles
+                'index': 5,
+                'timestamp': datetime(2023, 1, 1, 5, 0, tzinfo=timezone.utc).isoformat()
+            }
+            
+            # Second context also has swing points that won't detect breaks
+            context_4h = MarketContext(symbol="BTCUSDT", timeframe="4h")
+            context_4h.swing_high = {
+                'price': 108.0,  # Still too high for breaks
+                'index': 3,
+                'timestamp': datetime(2023, 1, 1, 3, 0, tzinfo=timezone.utc).isoformat()
+            }
+            context_4h.swing_low = {
+                'price': 92.0,   # Still too low for breaks
+                'index': 5,
+                'timestamp': datetime(2023, 1, 1, 5, 0, tzinfo=timezone.utc).isoformat()
+            }
+            
+            # Third context has swing points positioned to detect breaks
+            context_1d = MarketContext(symbol="BTCUSDT", timeframe="1d")
+            context_1d.swing_high = {
+                'price': 105.0,  # Same as in our original test
+                'index': 3,
+                'timestamp': datetime(2023, 1, 1, 3, 0, tzinfo=timezone.utc).isoformat()
+            }
+            context_1d.swing_low = {
+                'price': 95.0,   # Same as in our original test
+                'index': 5,
+                'timestamp': datetime(2023, 1, 1, 5, 0, tzinfo=timezone.utc).isoformat()
+            }
+            
+            # Test data with all three contexts
+            data = self.data.copy()
+            data["candles"] = self.hh_candles  # Using higher high candles to ensure we find breaks on the third context
+            data["market_contexts"] = [context_1h, context_4h, context_1d]
+            
+            # Monitor which contexts get checked by patching the _detect_breaks method
+            original_detect_breaks = self.indicator._detect_breaks
+            detect_breaks_calls = []
+            
+            def mock_detect_breaks(*args, **kwargs):
+                # Record the swing values used in the call
+                swing_high_price = args[1]
+                swing_low_price = args[2]
+                detect_breaks_calls.append((swing_high_price, swing_low_price))
+                
+                # For the first two contexts, return empty lists
+                if len(detect_breaks_calls) <= 2:
+                    return [], []
+                else:
+                    # For the third context, call the original method
+                    return original_detect_breaks(*args, **kwargs)
+            
+            self.indicator._detect_breaks = mock_detect_breaks
+            
+            # Run the indicator
+            result = await self.indicator.calculate(data)
+            
+            # Restore original method
+            self.indicator._detect_breaks = original_detect_breaks
+            
+            # Verify results
+            self.assertIsInstance(result, StructureBreakResultDto)
+            
+            # We should have detected breaks from the third context
+            all_breaks = result.bullish_breaks + result.bearish_breaks
+            self.assertGreater(len(all_breaks), 0, "No breaks detected with third context")
+            
+            # Verify we checked all three contexts
+            self.assertEqual(len(detect_breaks_calls), 3, 
+                            "Should have checked all three contexts")
+            
+            # Verify the swing values we used in each check
+            self.assertEqual(detect_breaks_calls[0], (110.0, 90.0), "Wrong values for 1h context")
+            self.assertEqual(detect_breaks_calls[1], (108.0, 92.0), "Wrong values for 4h context")
+            self.assertEqual(detect_breaks_calls[2], (105.0, 95.0), "Wrong values for 1d context")
+            
+        asyncio.run(run_test())
     
     def test_requirements(self):
         """Test that requirements are correctly reported."""
