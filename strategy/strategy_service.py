@@ -44,7 +44,7 @@ class StrategyService:
         """
         # TODO Refactor the definition of queues properly
         self.database = Database(db_url=config["data"]["database"]["database_url"])
-        self.signal_reposiory = SignalRepository(session=self.database.get_session)
+        self.signal_repository = SignalRepository(session=self.database.get_session)
         self.consumer_queue = consumer_queue
         self.producer_queue = producer_queue
         self.cache_service = cache_service
