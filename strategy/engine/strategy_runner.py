@@ -39,6 +39,7 @@ class StrategyRunner:
         consumer_queue: QueueService,
         context_engine: ContextEngine,
         database: Database,
+        signal_repository: SignalRepository,
         config: Dict[str, Any]
     ):
         """
@@ -54,7 +55,7 @@ class StrategyRunner:
         self.strategies = strategies
         self.database = database
         session = self.database.get_session()
-        self.signal_repository = SignalRepository(session=session)
+        self.signal_repository = signal_repository
         self.context_engine =context_engine
         # Holds Candle Data
         self.cache_service = cache_service
@@ -646,7 +647,7 @@ class StrategyRunner:
             )
             
             # Publish to the strategy exchange
-            self.producer_queue.publish(
+            await self.producer_queue.publish(
                 Exchanges.STRATEGY,
                 routing_key,
                 signal_dict
@@ -677,7 +678,7 @@ class StrategyRunner:
                 signal_dict
             )
             
-            logger.info(f"Published signal: {signal.id} ({signal.strategy} for {signal.symbol})")
+            logger.info(f"Published signal: {signal.id} (for {signal.symbol}, {signal.timeframe}, {signal.exchange})")
             return True
             
         except Exception as e:

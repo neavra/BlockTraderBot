@@ -15,6 +15,7 @@ from strategy.indicators.indicator_factory import IndicatorFactory
 from strategy.context.context_engine import ContextEngine
 from data.database.db import Database
 from strategy.domain.types.indicator_type_enum import IndicatorType
+from data.database.repository.signal_repository import SignalRepository
 
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,7 @@ class StrategyService:
         """
         # TODO Refactor the definition of queues properly
         self.database = Database(db_url=config["data"]["database"]["database_url"])
+        self.signal_reposiory = SignalRepository(session=self.database.get_session)
         self.consumer_queue = consumer_queue
         self.producer_queue = producer_queue
         self.cache_service = cache_service
@@ -196,6 +198,7 @@ class StrategyService:
                 consumer_queue=self.consumer_queue,
                 context_engine=self.context_engine,
                 database=self.database,
+                signal_repository= self.signal_repository,
                 config=self.config.get('strategy', {})
             )
             
