@@ -94,7 +94,7 @@ class OrderBlockStrategy(Strategy):
                 continue
             
             # Calculate strength score
-            results: StrengthDto = self.calculate_strength(block, market_contexts, demand_blocks + supply_blocks)
+            results: StrengthDto = await self.calculate_strength(block, market_contexts, demand_blocks + supply_blocks)
             block.strength = results.overall_score
             swing_score = results.swing_proximity
             fib_score = results.fib_confluence
@@ -151,7 +151,7 @@ class OrderBlockStrategy(Strategy):
             if block.status != 'active':
                 continue
             
-            results: StrengthDto = self.calculate_strength(block, market_contexts, demand_blocks + supply_blocks)
+            results: StrengthDto = await self.calculate_strength(block, market_contexts, demand_blocks + supply_blocks)
             block.strength = results.overall_score
             swing_score = results.swing_proximity
             fib_score = results.fib_confluence
@@ -278,7 +278,7 @@ class OrderBlockStrategy(Strategy):
 
         return True
     
-    def calculate_strength(self, order_block: OrderBlockDto, market_contexts: List[MarketContext], all_order_blocks: List[OrderBlockDto]) -> StrengthDto:
+    async def calculate_strength(self, order_block: OrderBlockDto, market_contexts: List[MarketContext], all_order_blocks: List[OrderBlockDto]) -> StrengthDto:
         """
         Calculate the strength score of an order block based on multiple factors.
         
@@ -300,7 +300,7 @@ class OrderBlockStrategy(Strategy):
         # Calculate individual scores
         swing_score = self.calculate_swing_proximity(order_block, market_contexts)
         fib_score = self.calculate_fib_confluence(order_block, market_contexts)
-        mtf_score = self.calculate_mtf_confluence(order_block, all_order_blocks)
+        mtf_score = await self.calculate_mtf_confluence(order_block, all_order_blocks)
         
         # Weighted sum for overall strength
         overall_score = (
@@ -404,7 +404,7 @@ class OrderBlockStrategy(Strategy):
                     
                     # Apply stronger emphasis on higher timeframes
                     # Use exponential scaling to emphasize higher timeframes more
-                    tf_weight = 0.4 + (0.6 * tf_position ** 2)  # Scale from 0.4 to 1.0 with exponential increase
+                    tf_weight = 0.6 + (0.4 * tf_position ** 2)  # Scale from 0.6 to 1.0 with exponential increase
                 else:
                     # Default weight for timeframes not in our expected hierarchy
                     tf_weight = 0.5
@@ -533,7 +533,7 @@ class OrderBlockStrategy(Strategy):
                     
                     # Apply stronger emphasis on higher timeframes
                     # Use exponential scaling to emphasize higher timeframes more
-                    tf_weight = 0.4 + (0.6 * tf_position ** 2)  # Scale from 0.4 to 1.0 with exponential increase
+                    tf_weight = 0.6 + (0.4 * tf_position ** 2)  # Scale from 0.6 to 1.0 with exponential increase
                 else:
                     # Default weight for timeframes not in our expected hierarchy
                     tf_weight = 0.5

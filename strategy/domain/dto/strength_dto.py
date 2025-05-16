@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 from typing import Dict, Any
 
@@ -20,20 +21,18 @@ class StrengthDto:
     raw_data: Dict[str, Any] = None
     
     def __post_init__(self):
-        """Validate that the overall score is correctly calculated from components."""
-        # Optional: Add validation that overall_score matches weighted sum of components
         calculated_score = (
             self.weights.get('swing_proximity', 0) * self.swing_proximity +
             self.weights.get('fib_confluence', 0) * self.fib_confluence + 
             self.weights.get('mtf_confluence', 0) * self.mtf_confluence
         )
         
-        # Allow for small floating point differences
-        if abs(calculated_score - self.overall_score) > 0.0001:
+        if not math.isclose(calculated_score, self.overall_score, rel_tol=1e-4):
             raise ValueError(
                 f"Overall score ({self.overall_score}) doesn't match "
                 f"calculated weighted sum ({calculated_score})"
             )
+
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization."""
