@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timezone
 from .base import Indicator
 from strategy.domain.dto.bos_dto import StructureBreakDto, StructureBreakResultDto
@@ -52,132 +52,69 @@ class StructureBreakIndicator(Indicator):
         """
         Detect Breaking of Structure events in the provided data and save them to the database.
         
-        Args:
-            data: Dictionary containing:
-                - candles: List of OHLCV candles
-                - market_contexts: Market context objects with swing high/low information
-                - symbol: Trading symbol
-                - timeframe: Timeframe
-                - exchange: Exchange name
-                
-        Returns:
-            StructureBreakResultDto with detected structure breaks
+        Will check each market context in order until it finds a BOS event.
+        If BOS is found in a lower timeframe, there's no need to check higher timeframes.
         """
         candles: List[CandleDto] = data.get("candles")
-        market_contexts = data.get("market_contexts")
+        market_contexts = data.get("market_contexts", [])
         
         # Extract market data information
         symbol = data.get("symbol")
         timeframe = data.get("timeframe")
         exchange = data.get("exchange", "default")
         
-        # Check if we have at least one market context
-        if not market_contexts or len(market_contexts) == 0:
-            logger.warning("No market contexts provided, cannot detect structure breaks")
-            return self._get_empty_result()
-            
-        market_context: MarketContext = market_contexts[0]
-        
         # Need enough candles to analyze
         if len(candles) < 3:
             logger.warning("Not enough candles to detect structure breaks (minimum 3 required)")
             return self._get_empty_result()
         
-        # Need market context with swing points to detect breaks
-        if not market_context or not market_context.swing_high or not market_context.swing_low:
-            logger.warning("No market context provided, cannot detect structure breaks")
+        # Check if we have any market contexts
+        if not market_contexts or len(market_contexts) == 0:
+            logger.warning("No market contexts provided, cannot detect structure breaks")
             return self._get_empty_result()
         
-        # Get recent swing points from market context
-        swing_high = market_context.swing_high
-        swing_low = market_context.swing_low
+        # Initialize result containers
+        bullish_breaks = []
+        bearish_breaks = []
         
-        # Check if swing points are available
-        if not swing_high or not swing_low:
-            logger.info("No swing points available in market context")
-            return self._get_empty_result()
-        
-        # Extract swing values from market context (accounting for potential dict or object structure)
-        swing_high_price = swing_high.get('price') if isinstance(swing_high, dict) else getattr(swing_high, 'price', None)
-        swing_low_price = swing_low.get('price') if isinstance(swing_low, dict) else getattr(swing_low, 'price', None)
-        
-        if swing_high_price is None or swing_low_price is None:
-            logger.warning("Invalid swing point data in market context")
-            return self._get_empty_result()
-        
-        # Now let's detect the structure breaks
-        bullish_breaks = []  # Higher highs and higher lows
-        bearish_breaks = []  # Lower lows and lower highs
-        
-        # Calculate minimum break thresholds based on swing points rather than current price
-        min_break_high = swing_high_price * self.params['min_break_percentage']
-        min_break_low = swing_low_price * self.params['min_break_percentage']
-        
-        # Process each candle in the lookback period (we need to consider relative position to swings)
-        lookback_period = min(self.params['lookback_period'], len(candles))
-        
-        for i in range(1, lookback_period + 1):
-            candle_idx = len(candles) - i
-            if candle_idx < 0:
+        # Check each market context until we find structure breaks
+        for market_context in market_contexts:
+            # Need market context with swing points to detect breaks
+            if not market_context or not market_context.swing_high or not market_context.swing_low:
+                logger.info(f"Skipping context: {market_context.timeframe if hasattr(market_context, 'timeframe') else 'unknown'} - No swing points available")
+                continue
+            
+            # Get swing points from market context
+            swing_high = market_context.swing_high
+            swing_low = market_context.swing_low
+            
+            # Extract swing values from market context (accounting for potential dict or object structure)
+            swing_high_price = swing_high.get('price') if isinstance(swing_high, dict) else getattr(swing_high, 'price', None)
+            swing_low_price = swing_low.get('price') if isinstance(swing_low, dict) else getattr(swing_low, 'price', None)
+            
+            if swing_high_price is None or swing_low_price is None:
+                logger.warning(f"Invalid swing point data in market context: {market_context.timeframe if hasattr(market_context, 'timeframe') else 'unknown'}")
+                continue
+            
+            # Calculate minimum break thresholds based on swing points
+            min_break_high = swing_high_price * self.params['min_break_percentage']
+            min_break_low = swing_low_price * self.params['min_break_percentage']
+            
+            # Process candles to find breaks
+            curr_bullish_breaks, curr_bearish_breaks = self._detect_breaks(
+                candles, swing_high_price, swing_low_price, min_break_high, min_break_low
+            )
+            
+            # Add detected breaks to our results
+            bullish_breaks.extend(curr_bullish_breaks)
+            bearish_breaks.extend(curr_bearish_breaks)
+            
+            # If we found any breaks, no need to check higher timeframes
+            if curr_bullish_breaks or curr_bearish_breaks:
+                logger.info(f"Found BOS in timeframe: {market_context.timeframe if hasattr(market_context, 'timeframe') else 'unknown'}")
                 break
-                
-            candle = candles[candle_idx]
-            timestamp = candle.timestamp
-            
-            # Higher High detection (bullish)
-            if candle.high > swing_high_price + min_break_high:
-                # Check if confirmed by N candles staying above
-                if self._is_break_confirmed(candles, candle_idx, 'high', swing_high_price):
-                    bullish_breaks.append(StructureBreakDto(
-                        index=candle_idx,
-                        break_type='higher_high',
-                        break_value=candle.high - swing_high_price,
-                        break_percentage=(candle.high - swing_high_price) / swing_high_price,
-                        swing_reference=swing_high_price,
-                        candle=candle,
-                        timestamp=timestamp,
-                    ))
-            
-            # Lower Low detection (bearish)
-            if candle.low < swing_low_price - min_break_low:
-                # Check if confirmed by N candles staying below
-                if self._is_break_confirmed(candles, candle_idx, 'low', swing_low_price):
-                    bearish_breaks.append(StructureBreakDto(
-                        index=candle_idx,
-                        break_type='lower_low',
-                        break_value=swing_low_price - candle.low,
-                        break_percentage=(swing_low_price - candle.low) / swing_low_price,
-                        swing_reference=swing_low_price,
-                        candle=candle,
-                        timestamp=timestamp,
-                    ))
-            
-            # Higher Low detection (bullish)
-            # Need to have a previous swing low and current low should be higher
-            if candle.low > swing_low_price + min_break_low:
-                # No confirmation needed for HL/LH since they're not actual "breaks"
-                bullish_breaks.append(StructureBreakDto(
-                    index=candle_idx,
-                    break_type='higher_low',
-                    break_value=candle.low - swing_low_price,
-                    break_percentage=(candle.low - swing_low_price) / swing_low_price,
-                    swing_reference=swing_low_price,
-                    candle=candle,
-                    timestamp=timestamp,
-                ))
-            
-            # Lower High detection (bearish)
-            # Need to have a previous swing high and current high should be lower
-            if candle.high < swing_high_price - min_break_high:
-                bearish_breaks.append(StructureBreakDto(
-                    index=candle_idx,
-                    break_type='lower_high',
-                    break_value=swing_high_price - candle.high,
-                    break_percentage=(swing_high_price - candle.high) / swing_high_price,
-                    swing_reference=swing_high_price,
-                    candle=candle,
-                    timestamp=timestamp,
-                ))
+            else:
+                logger.info(f"No BOS found in timeframe: {market_context.timeframe if hasattr(market_context, 'timeframe') else 'unknown'}, checking next timeframe")
         
         # Sort each list by index (most recent first)
         bullish_breaks.sort(key=lambda x: x.index, reverse=True)
@@ -231,6 +168,90 @@ class StructureBreakIndicator(Indicator):
             bullish_breaks=bullish_breaks,
             bearish_breaks=bearish_breaks
         )
+    
+    def _detect_breaks(self, candles: List[CandleDto], swing_high_price: float, swing_low_price: float, 
+                  min_break_high: float, min_break_low: float) -> Tuple[List[StructureBreakDto], List[StructureBreakDto]]:
+        """
+        Detect bullish and bearish structure breaks based on given swing levels.
+        
+        Args:
+            candles: List of OHLCV candles
+            swing_high_price: Swing high reference price
+            swing_low_price: Swing low reference price
+            min_break_high: Minimum high break threshold
+            min_break_low: Minimum low break threshold
+            
+        Returns:
+            Tuple of (bullish_breaks, bearish_breaks)
+        """
+        bullish_breaks = []  # Higher highs and higher lows
+        bearish_breaks = []  # Lower lows and lower highs
+        
+        # Process each candle in the lookback period
+        lookback_period = min(self.params['lookback_period'], len(candles))
+        
+        for i in range(1, lookback_period + 1):
+            candle_idx = len(candles) - i
+            if candle_idx < 0:
+                break
+                
+            candle = candles[candle_idx]
+            timestamp = candle.timestamp
+            
+            # Higher High detection (bullish)
+            if candle.high > swing_high_price + min_break_high:
+                # Check if confirmed by N candles staying above
+                if self._is_break_confirmed(candles, candle_idx, 'high', swing_high_price):
+                    bullish_breaks.append(StructureBreakDto(
+                        index=candle_idx,
+                        break_type='higher_high',
+                        break_value=candle.high - swing_high_price,
+                        break_percentage=(candle.high - swing_high_price) / swing_high_price,
+                        swing_reference=swing_high_price,
+                        candle=candle,
+                        timestamp=timestamp,
+                    ))
+            
+            # Lower Low detection (bearish)
+            if candle.low < swing_low_price - min_break_low:
+                # Check if confirmed by N candles staying below
+                if self._is_break_confirmed(candles, candle_idx, 'low', swing_low_price):
+                    bearish_breaks.append(StructureBreakDto(
+                        index=candle_idx,
+                        break_type='lower_low',
+                        break_value=swing_low_price - candle.low,
+                        break_percentage=(swing_low_price - candle.low) / swing_low_price,
+                        swing_reference=swing_low_price,
+                        candle=candle,
+                        timestamp=timestamp,
+                    ))
+            
+            # Higher Low detection (bullish)
+            if candle.low > swing_low_price + min_break_low:
+                # No confirmation needed for HL/LH since they're not actual "breaks"
+                bullish_breaks.append(StructureBreakDto(
+                    index=candle_idx,
+                    break_type='higher_low',
+                    break_value=candle.low - swing_low_price,
+                    break_percentage=(candle.low - swing_low_price) / swing_low_price,
+                    swing_reference=swing_low_price,
+                    candle=candle,
+                    timestamp=timestamp,
+                ))
+            
+            # Lower High detection (bearish)
+            if candle.high < swing_high_price - min_break_high:
+                bearish_breaks.append(StructureBreakDto(
+                    index=candle_idx,
+                    break_type='lower_high',
+                    break_value=swing_high_price - candle.high,
+                    break_percentage=(swing_high_price - candle.high) / swing_high_price,
+                    swing_reference=swing_high_price,
+                    candle=candle,
+                    timestamp=timestamp,
+                ))
+        
+        return bullish_breaks, bearish_breaks
     
     async def process_existing_indicators(self, indicators: List[Any], candles: List[CandleDto]):
         return None

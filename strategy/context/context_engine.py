@@ -163,6 +163,7 @@ class ContextEngine:
                 return None
 
             contexts.append(context)
+        logger.info(f"Retrieved context for {symbol}-{tf}-{exchange}")
 
         return contexts
     
