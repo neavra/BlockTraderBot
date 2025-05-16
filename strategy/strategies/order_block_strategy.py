@@ -51,7 +51,7 @@ class OrderBlockStrategy(Strategy):
             if indicator_name not in indicators:
                 raise ValueError(f"Missing required indicator: {indicator_name}")
         
-        self.order_block_repository = indicators.get(IndicatorType.ORDER_BLOCK.name).repository
+        self.order_block_repository = indicators.get(IndicatorType.ORDER_BLOCK).repository
         if not self.order_block_repository:
             raise ValueError(f"Unable to get repository from Order Block Indicator")
         

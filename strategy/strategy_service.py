@@ -171,6 +171,7 @@ class StrategyService:
                 continue
                 
             try:
+                logger.info(f"Initializing strategy: {strat_name}")
                 strategy = strategy_factory.create_strategy(
                     strat_name,
                     indicators=self.indicators,

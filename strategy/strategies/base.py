@@ -36,7 +36,7 @@ class Strategy(ABC):
         pass
     
     @abstractmethod
-    def calculate_signal_strength(self, signal_data: Dict[str, Any]) -> float:
+    def calculate_strength(self, signal_data: Dict[str, Any]) -> float:
         """
         Calculate the strength of a generated signal
         

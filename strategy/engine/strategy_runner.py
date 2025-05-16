@@ -52,7 +52,7 @@ class StrategyRunner:
             config: Configuration dictionary
         """
         self.strategies = strategies
-        self.database = Database
+        self.database = database
         session = self.database.get_session()
         self.signal_repository = SignalRepository(session=session)
         self.context_engine =context_engine
