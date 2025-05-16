@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 from strategy.domain.dto.indicator_result_dto import IndicatorResultDto
 from shared.domain.dto.candle_dto import CandleDto
@@ -27,8 +27,8 @@ class OrderBlockDto:
     status: str # 'active', 'mitigated'
     touched: bool
     mitigation_percentage: float
-    strength: float
     created_at:datetime
+    strength: Optional[float] = 0.0
     
     @property
     def is_demand(self) -> bool:
@@ -57,18 +57,31 @@ class OrderBlockDto:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'OrderBlockDto':
         """Create an OrderBlock DTO from a dictionary"""
+        timestamp = data.get('timestamp')
+        if isinstance(timestamp, str):
+            try:
+                timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            except (ValueError, TypeError):
+                timestamp = datetime.now(timezone.utc)
         return cls(
-            type=data.get('type', ''),
-            price_high=data.get('price_high', 0.0),
-            price_low=data.get('price_low', 0.0),
-            index=data.get('index', 0),
-            wick_ratio=data.get('wick_ratio', 0.0),
-            body_ratio=data.get('body_ratio', 0.0),
-            candle=data.get('candle', {}),
-            related_fvg=data.get('related_fvg', None),
-            is_doji=data.get('is_doji', False),
-            timestamp=data.get('timestamp'),
-            doji_data=data.get('doji_data')
+            timeframe=data['timeframe'],
+            symbol=data['symbol'],
+            exchange=data['exchange'],
+            type=data['type'],
+            price_high=data['price_high'],
+            price_low=data['price_low'],
+            index=data['index'],
+            candle=data['candle'],
+            related_fvg=data['related_fvg'],
+            is_doji=data['is_doji'],
+            timestamp=timestamp,
+            doji_data=data['doji_data'],
+            bos_data=data['bos_data'],
+            status=data['status'],
+            touched=data['touched'],
+            mitigation_percentage=data['mitigation_percentage'],
+            strength=data['strength'],
+            created_at=data['created_at']
         )
 
 

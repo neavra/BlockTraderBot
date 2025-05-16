@@ -423,26 +423,26 @@ class OrderBlockIndicator(Indicator):
             # For demand (bullish) order blocks
             if ob_type == 'demand':
                 # Check if candle trades into the zone
-                if ((candle['low'] <= ob_high and candle['low'] >= ob_low) or
-                    (candle['high'] >= ob_low and candle['high'] <= ob_high) or
-                    (candle['low'] <= ob_low and candle['high'] >= ob_high)):
+                if ((candle.low <= ob_high and candle.low >= ob_low) or
+                    (candle.high >= ob_low and candle.high <= ob_high) or
+                    (candle.low <= ob_low and candle.high >= ob_high)):
                     was_touched = True
                     candle_interacts = True
             
             # For supply (bearish) order blocks
             elif ob_type == 'supply':
                 # Check if candle trades into the zone
-                if ((candle['high'] >= ob_low and candle['high'] <= ob_high) or
-                    (candle['low'] <= ob_high and candle['low'] >= ob_low) or
-                    (candle['low'] <= ob_low and candle['high'] >= ob_high)):
+                if ((candle.high >= ob_low and candle.high <= ob_high) or
+                    (candle.low <= ob_high and candle.low >= ob_low) or
+                    (candle.low <= ob_low and candle.high >= ob_high)):
                     was_touched = True
                     candle_interacts = True
             
             # If this candle interacts with the zone, calculate mitigated area
             if candle_interacts:
                 # Calculate the overlap between candle and order block
-                overlap_high = min(candle['high'], ob_high)
-                overlap_low = max(candle['low'], ob_low)
+                overlap_high = min(candle.high, ob_high)
+                overlap_low = max(candle.low, ob_low)
                 
                 if overlap_high > overlap_low:
                     # There is an overlap - add it to mitigated areas
@@ -480,8 +480,10 @@ class OrderBlockIndicator(Indicator):
         order_block.mitigation_percentage = mitigation_percentage
         
         # Check if mitigation threshold exceeded, for now as long as it is touched it is mitigated
-        if mitigation_percentage >= 0:
+        mitigation_threshold = self.params.get('mitigation_threshold', 0.2)  # 20% default
+        if mitigation_percentage >= mitigation_threshold * 100:
             order_block.status = 'mitigated'
+
         
         return order_block
     

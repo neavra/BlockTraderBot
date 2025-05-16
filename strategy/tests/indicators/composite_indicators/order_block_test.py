@@ -290,6 +290,137 @@ class TestOrderBlockIndicator(unittest.TestCase):
             self.assertTrue(result.has_supply_block)
             
         asyncio.run(run_test())
+
+    def test_process_existing_indicators(self):
+        """Test processing existing order blocks for mitigation."""
+        async def run_test():
+            # Create mock order blocks that need to be processed for mitigation
+            existing_blocks = [
+                # Active demand block that will be partially mitigated
+                {
+                    'type': 'demand',
+                    'price_high': 105.0,
+                    'price_low': 100.0,
+                    'index': 0,
+                    'is_doji': True,
+                    'timestamp': self.candles[0].timestamp.isoformat(),
+                    'status': 'active',
+                    'touched': False,
+                    'mitigation_percentage': 0.0,
+                    'timeframe': '1h',
+                    'symbol': 'BTCUSDT',
+                    'exchange': 'binance',
+                    'candle': asdict(self.candles[0]),
+                    'related_fvg': asdict(self.fvg_data.bullish_fvgs[0]),
+                    'doji_data': asdict(self.doji_data.dojis[0]),
+                    'bos_data': asdict(self.bos_data.bullish_breaks[0]),
+                    'strength': 0.8,
+                    'created_at': datetime.now(timezone.utc).isoformat()
+                },
+                # Active supply block that will not be mitigated
+                {
+                    'type': 'supply',
+                    'price_high': 115.0,
+                    'price_low': 110.0,
+                    'index': 1,
+                    'is_doji': True,
+                    'timestamp': self.candles[1].timestamp.isoformat(),
+                    'status': 'active',
+                    'touched': False,
+                    'mitigation_percentage': 0.0,
+                    'timeframe': '1h',
+                    'symbol': 'BTCUSDT',
+                    'exchange': 'binance',
+                    'candle': asdict(self.candles[1]),
+                    'related_fvg': asdict(self.fvg_data.bearish_fvgs[0]),
+                    'doji_data': asdict(self.doji_data.dojis[1]),
+                    'bos_data': asdict(self.bos_data.bearish_breaks[0]),
+                    'strength': 0.8,
+                    'created_at': datetime.now(timezone.utc).isoformat()
+                }
+            ]
+            
+            # Create candles for testing mitigation
+            # Price action that interacts with the first order block but not the second
+            mitigation_candles = [
+                CandleDto(
+                    symbol="BTCUSDT",
+                    exchange="binance",
+                    timeframe="1h",
+                    timestamp=datetime(2023, 1, 2, 0, 0, tzinfo=timezone.utc),  # After block formation
+                    open=98.0,
+                    high=103.0,  # Trades into the first order block zone
+                    low=97.0,
+                    close=102.0,
+                    volume=1000,
+                    is_closed=True
+                ),
+                CandleDto(
+                    symbol="BTCUSDT",
+                    exchange="binance",
+                    timeframe="1h",
+                    timestamp=datetime(2023, 1, 2, 1, 0, tzinfo=timezone.utc),
+                    open=102.0,
+                    high=104.0,  # Further enters the first order block zone
+                    low=99.0,
+                    close=103.0,
+                    volume=1200,
+                    is_closed=True
+                )
+            ]
+            
+            # Call process_existing_indicators
+            updated_blocks, valid_blocks = await self.indicator.process_existing_indicators(
+                existing_blocks, 
+                mitigation_candles
+            )
+            
+            # Verify updated blocks - both blocks should be updated
+            self.assertEqual(len(updated_blocks), 2)
+            
+            # First block should be touched and partially mitigated
+            self.assertTrue(updated_blocks[0].touched)
+            self.assertGreater(updated_blocks[0].mitigation_percentage, 0.0)
+            
+            # Second block should still be active and untouched
+            self.assertEqual(updated_blocks[1].status, 'active')
+            self.assertFalse(updated_blocks[1].touched)
+            self.assertEqual(updated_blocks[1].mitigation_percentage, 0.0)
+            
+            # Verify valid blocks - one should be active one should be mitigated
+            self.assertEqual(len(valid_blocks), 1)
+            
+            # Create candles for full mitigation test
+            full_mitigation_candles = [
+                CandleDto(
+                    symbol="BTCUSDT",
+                    exchange="binance",
+                    timeframe="1h",
+                    timestamp=datetime(2023, 1, 2, 0, 0, tzinfo=timezone.utc),
+                    open=98.0,
+                    high=106.0,  # Completely covers the first order block zone
+                    low=99.0,
+                    close=105.0,
+                    volume=1000,
+                    is_closed=True
+                )
+            ]
+            
+            # Process with full mitigation candles
+            updated_blocks_2, valid_blocks_2 = await self.indicator.process_existing_indicators(
+                existing_blocks, 
+                full_mitigation_candles
+            )
+            
+            # First block should now be fully mitigated
+            self.assertEqual(updated_blocks_2[0].status, 'mitigated')
+            self.assertTrue(updated_blocks_2[0].touched)
+            self.assertGreaterEqual(updated_blocks_2[0].mitigation_percentage, self.indicator.params['mitigation_threshold'] * 100)
+            
+            # Valid blocks should now only contain the second block
+            self.assertEqual(len(valid_blocks_2), 1)
+        
+        asyncio.run(run_test())
     
     def test_sequence_requirement(self):
         """Test that the sequence requirement is enforced."""

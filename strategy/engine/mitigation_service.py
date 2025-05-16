@@ -38,10 +38,10 @@ class MitigationService:
             repository: Repository for storing/retrieving indicator instances
         """
         if indicator_type.requires_mitigation:
-            self.indicators[indicator_type] = indicator
-            logger.info(f"Registered indicator '{indicator_type}' for mitigation processing")
+            self.indicators[indicator_type.value] = indicator
+            logger.info(f"Registered indicator '{indicator_type.value}' for mitigation processing")
         else:
-            logger.debug(f"Indicator '{indicator_type}' does not require mitigation, skipping registration")
+            logger.debug(f"Indicator '{indicator_type.value}' does not require mitigation, skipping registration")
     
     async def process_mitigation(
         self,
