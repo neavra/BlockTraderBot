@@ -13,7 +13,7 @@ class Indicator(ABC):
         self.name = self.__class__.__name__
         
     @abstractmethod
-    async def calculate(self, candle_data: List[Any], dependency_data: Dict[str, Any] = None) -> IndicatorResultDto:
+    async def calculate(self, data: Dict[str, Any]) -> IndicatorResultDto:
         """
         Calculate the indicator value based on the provided data
         
