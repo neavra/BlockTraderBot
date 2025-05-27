@@ -37,6 +37,7 @@ class StrategyRunner:
         cache_service: CacheService,
         producer_queue: QueueService,
         consumer_queue: QueueService,
+        mitigation_service: MitigationService,
         context_engine: ContextEngine,
         database: Database,
         signal_repository: SignalRepository,
@@ -71,8 +72,7 @@ class StrategyRunner:
         self.all_indicators : Dict[str, Indicator] = {} 
         # Create indicator DAG
         self.indicator_dag = IndicatorDAG()
-        # Initialize mitigation service
-        self.mitigation_service = MitigationService()
+        self.mitigation_service = mitigation_service
     
     async def start(self):
         """Start the strategy runner"""

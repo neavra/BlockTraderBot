@@ -101,6 +101,7 @@ class TestStrategyRunner(unittest.IsolatedAsyncioTestCase):
                 cache_service=self.mock_cache,
                 producer_queue=self.mock_producer_queue,
                 consumer_queue=self.mock_consumer_queue,
+                mitigation_service=MagicMock(spec=MitigationService),
                 context_engine=self.mock_context_engine,
                 database=self.mock_db,
                 signal_repository=self.mock_signal_repo,
@@ -115,7 +116,6 @@ class TestStrategyRunner(unittest.IsolatedAsyncioTestCase):
             })
             
             # Mock the mitigation service
-            self.strategy_runner.mitigation_service = MagicMock(spec=MitigationService)
             self.strategy_runner.mitigation_service.process_mitigation = AsyncMock(return_value={'order_block': {'processed': 0}})
             
             # Start the runner

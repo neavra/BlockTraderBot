@@ -10,6 +10,7 @@ from shared.constants import Exchanges, Queues, RoutingKeys
 from strategy.indicators.base import Indicator
 from strategy.strategies.base import Strategy
 from strategy.engine.strategy_runner import StrategyRunner
+from strategy.engine.mitigation_service import MitigationService
 from strategy.strategies.strategy_factory import StrategyFactory
 from strategy.indicators.indicator_factory import IndicatorFactory
 from strategy.context.context_engine import ContextEngine
@@ -54,6 +55,7 @@ class StrategyService:
         # Components to be initialized in start()
         self.indicators = {}
         self.strategies = []
+        self.mitigation_service = MitigationService()
         self.context_engine = None
         self.strategy_runner = None
         self.main_loop = None
@@ -196,6 +198,7 @@ class StrategyService:
                 cache_service=self.cache_service,
                 producer_queue=self.producer_queue,
                 consumer_queue=self.consumer_queue,
+                mitigation_service=self.mitigation_service,
                 context_engine=self.context_engine,
                 database=self.database,
                 signal_repository= self.signal_repository,
