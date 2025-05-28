@@ -188,6 +188,26 @@ class ExecutionService:
                 
                 if order_result:
                     logger.info(f"Order executed successfully: {order_result['id']}")
+
+                    # Create Order object for tracking
+                    order = OrderDto(
+                        id=order_result['id'],
+                        symbol=order_params['symbol'],
+                        side=order_params['side'],
+                        type=order_params['type'],
+                        price=order_params['price'],
+                        size=order_params['amount'],
+                        status=order_result.get('status', 'open'),
+                        timestamp=datetime.now().isoformat()
+                    )
+                    # Cache the order
+                    await self._cache_order(order_result['id'], order)
+                    
+                    # Publish order event
+                    await self._publish_order_event(order, 'created')
+                    
+                    # Store in active orders
+                    self.active_orders[order_result['id']] = order
                 else:
                     logger.error(f"Failed to execute order for signal: {signal_message['id']}")
             else:
@@ -299,9 +319,6 @@ class ExecutionService:
         
         This method:
         1. Places the order on the exchange
-        2. Handles any related orders (stop loss, take profit)
-        3. Caches the order details
-        4. Publishes an order event to the tracking queue
         """
         try:
             symbol = order_params['symbol']
@@ -326,27 +343,6 @@ class ExecutionService:
             if not order_result:
                 logger.error("Order execution failed: No result returned from exchange")
                 return None
-            
-            # Create Order object for tracking
-            order = OrderDto(
-                id=order_result['id'],
-                symbol=symbol,
-                side=side,
-                type=order_type,
-                price=price,
-                size=amount,
-                status=order_result.get('status', 'open'),
-                timestamp=datetime.now().isoformat()
-            )
-            
-            # Cache the order
-            await self._cache_order(order_result['id'], order)
-            
-            # Publish order event
-            await self._publish_order_event(order, 'created')
-            
-            # Store in active orders
-            self.active_orders[order_result['id']] = order
             
             # Handle stop loss and take profit orders if needed
             # This would be implemented based on the exchange's capabilities
