@@ -290,7 +290,7 @@ class StrategyRunner:
         except Exception as e:
             logger.error(f"Error executing mitigation: {e}", exc_info=True)
 
-    async def execute_strategies(self, candle_data: List[CandleDto], market_contexts: List[MarketContext], source: SourceTypeEnum):
+    async def execute_strategies(self, candle_data: List[CandleDto], market_contexts: List[MarketContext], source: SourceTypeEnum) -> List[SignalDto]:
         """
         Execute all applicable strategies with the provided market data
         
@@ -350,7 +350,9 @@ class StrategyRunner:
                         if saved_signal:
                             logger.info(f"Saved signal to database: ID {saved_signal.get('id')}")
                         else:
-                            logger.warning(f"Failed to save signal to database")                                                  
+                            logger.warning(f"Failed to save signal to database")    
+
+                        return signals
                 except Exception as e:
                     logger.error(f"Error executing strategy {strategy.name}: {e}", exc_info=True)
         

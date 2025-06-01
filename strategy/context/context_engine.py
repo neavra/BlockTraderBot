@@ -103,21 +103,23 @@ class ContextEngine:
             return None
 
         cache_key = self._get_context_cache_key(symbol, timeframe, exchange)
-        existing_context = self.cache_service.get(cache_key)
+        cached_context_data = self.cache_service.get(cache_key)
         is_first_time = False
-        if existing_context is None:
+        if cached_context_data is None:
             is_first_time = True
             existing_context = MarketContext(symbol, timeframe, exchange)
+        else:
+            existing_context = MarketContext.from_dict(cached_context_data)
 
         # Note here, that the existing_context object is being edited directly, no new object is created
-        # context == existing_context
-        updatedFlag = False
+        context = existing_context
+        updated_flag = False
         for analyzer_type, analyzer in self.analyzers.items():
             if analyzer:
                 try:
                     context, updated = analyzer.update_market_context(existing_context, candles)
                     if updated:
-                        updatedFlag = True
+                        updated_flag = True
                 except Exception as e:
                     logger.error(f"Error updating context with {analyzer_type} analyzer: {e}")
 
@@ -129,13 +131,14 @@ class ContextEngine:
         # need to check the context properly here
         if not context.is_complete():
             logger.info(f"Market Context is incomplete {context}")
-            return None
+            
         # If this is the first market context created, add it to the cache
         # Else, add the old one to the repository and set the new one to the cache
         if is_first_time:
-            self.cache_service.set(cache_key, context, expiry=CacheTTL.MARKET_STATE)
-        elif updatedFlag:
-            self.cache_service.set(cache_key, context, expiry=CacheTTL.MARKET_STATE)
+            logger.info(f"Market Context setting market context for the first time: {context}")
+            self.cache_service.set(cache_key, context.to_dict(), expiry=CacheTTL.MARKET_STATE)
+        elif updated_flag:
+            self.cache_service.set(cache_key, context.to_dict(), expiry=CacheTTL.MARKET_STATE)
             try:
                 await self._store_context_history(existing_context)
             except Exception as e:
@@ -145,7 +148,7 @@ class ContextEngine:
     
     async def get_multi_timeframe_contexts(
         self, symbol: str, base_timeframe: str, exchange: str = "default"
-    ) -> Optional[List[MarketContext]]:
+    ) -> List[MarketContext]:
         """
         Get required multi-timeframe MarketContexts for a base timeframe.
         Returns None if any required context is missing.
@@ -154,17 +157,25 @@ class ContextEngine:
         if not required_timeframes:
             logger.warning(f"Timeframe {base_timeframe} not supported")
         contexts = []
+        
         for tf in required_timeframes:
             cache_key = self._get_context_cache_key(symbol, tf, exchange)
-            context = self.cache_service.get(cache_key)
-
-            if not context:
-                logger.debug(f"Missing context for {symbol} {tf} on {exchange}")
-                return None
-
+            cached_context_data = self.cache_service.get(cache_key)
+            if not cached_context_data:
+                logger.debug(f"Missing cached context for {symbol} {tf} on {exchange}")
+                continue
+            
+            # Convert dictionary back to MarketContext object
+            try:
+                context = MarketContext.from_dict(cached_context_data)
+            except Exception as e:
+                logger.error(f"Error converting cached context data to MarketContext for {symbol} {tf}: {e}")
+                continue
+            
             contexts.append(context)
-        logger.info(f"Retrieved context for {symbol}-{tf}-{exchange}")
-
+        
+        if contexts is None:
+            return None
         return contexts
     
     async def _store_context_history(self, context_data: MarketContext) -> None:

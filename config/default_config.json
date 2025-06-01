@@ -66,13 +66,6 @@
           "lookback": 5,
           "min_strength": 0.2
         },
-        "trend": {
-          "lookback": 3
-        },
-        "range": {
-          "min_touches": 3,
-          "min_range_size": 0.5
-        },
         "fibbonacci": {
           
         }

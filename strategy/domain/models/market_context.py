@@ -153,10 +153,10 @@ class MarketContext:
             'symbol': self.symbol,
             'timeframe': self.timeframe,
             'exchange': self.exchange,
-            'timestamp': self.timestamp,
+            'timestamp': self.timestamp.isoformat() if isinstance(self.timestamp, datetime) else self.timestamp,
             'current_price': self.current_price,
-            'swing_high': self.swing_high,
-            'swing_low': self.swing_low,
+            'swing_high': self._serialize_swing_point(self.swing_high),
+            'swing_low': self._serialize_swing_point(self.swing_low),
             'trend': self.trend,
             'range_high': self.range_high,
             'range_low': self.range_low,
@@ -164,26 +164,105 @@ class MarketContext:
             'is_in_range': self.is_in_range,
             'range_size': self.range_size,
             'range_strength': self.range_strength,
-            'range_detected_at': self.range_detected_at,
+            'range_detected_at': self.range_detected_at.isoformat() if isinstance(self.range_detected_at, datetime) else self.range_detected_at,
             'fib_levels': self.fib_levels,
             'last_updated': self.last_updated
         }
+    
+    def _serialize_swing_point(self, swing_point):
+        """Helper to serialize swing point data"""
+        if not swing_point:
+            return swing_point
+        
+        if isinstance(swing_point, dict) and 'timestamp' in swing_point:
+            swing_copy = swing_point.copy()
+            if isinstance(swing_copy['timestamp'], datetime):
+                swing_copy['timestamp'] = swing_copy['timestamp'].isoformat()
+            return swing_copy
+        
+        return swing_point
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'MarketContext':
-        """Create context from dictionary"""
-        # Filter out keys that aren't valid for the dataclass constructor
-        init_keys = {f.name for f in fields(cls) if f.init}
-        init_data = {k: v for k, v in data.items() if k in init_keys}
+        """
+        Create a MarketContext object from a dictionary.
         
-        # Create the instance
-        context = cls(**init_data)
+        Args:
+            data: Dictionary containing MarketContext data
+            
+        Returns:
+            MarketContext object
+        """
+        from datetime import datetime
         
-        # Set other attributes after initialization
-        for key, value in data.items():
-            if key not in init_keys and hasattr(context, key):
-                setattr(context, key, value)
-                
+        def parse_datetime(value):
+            """Helper function to parse datetime from various formats"""
+            if value is None:
+                return None
+            if isinstance(value, datetime):
+                return value
+            if isinstance(value, str):
+                try:
+                    # Try parsing ISO format
+                    return datetime.fromisoformat(value.replace('Z', '+00:00'))
+                except ValueError:
+                    try:
+                        # Try parsing timestamp format
+                        return datetime.fromtimestamp(float(value))
+                    except (ValueError, TypeError):
+                        return None
+            if isinstance(value, (int, float)):
+                try:
+                    return datetime.fromtimestamp(value)
+                except (ValueError, OSError):
+                    return None
+            return None
+        
+        def parse_swing_point(swing_data):
+            """Helper function to parse swing point data"""
+            if swing_data is None or not isinstance(swing_data, dict):
+                return swing_data
+            
+            # Create a copy to avoid modifying original data
+            parsed_swing = swing_data.copy()
+            
+            # Parse timestamp in swing point if it exists
+            if 'timestamp' in parsed_swing:
+                parsed_swing['timestamp'] = parse_datetime(parsed_swing['timestamp'])
+            
+            return parsed_swing
+        
+        # Create a new instance
+        context = cls(
+            symbol=data.get('symbol'),
+            timeframe=data.get('timeframe'),
+            exchange=data.get('exchange')
+        )
+        
+        # Set all the attributes from the dictionary with proper type conversion
+        context.id = data.get('id')
+        context.timestamp = data.get('timestamp')  # Keep as string for ISO format
+        context.last_updated = data.get('last_updated')  # Keep as timestamp float
+        context.current_price = data.get('current_price')
+        
+        # Parse swing points with datetime conversion
+        context.swing_high = parse_swing_point(data.get('swing_high'))
+        context.swing_low = parse_swing_point(data.get('swing_low'))
+        
+        context.trend = data.get('trend')
+        context.range_high = data.get('range_high')
+        context.range_low = data.get('range_low')
+        context.range_equilibrium = data.get('range_equilibrium')
+        context.range_size = data.get('range_size')
+        context.range_strength = data.get('range_strength')
+        
+        # Parse range_detected_at as datetime
+        context.range_detected_at = parse_datetime(data.get('range_detected_at'))
+        
+        context.is_in_range = data.get('is_in_range')
+        context.fib_levels = data.get('fib_levels')
+        context.timeframe_category = data.get('timeframe_category')
+        
         return context
     
     def is_complete(self) -> bool:
@@ -194,6 +273,6 @@ class MarketContext:
             self.exchange,
             self.swing_high is not None,
             self.swing_low is not None,
-            bool(self.fib_levels.get("support")) or bool(self.fib_levels.get("resistance")),
+            self.fib_levels is not None,
             self.current_price is not None
         ])

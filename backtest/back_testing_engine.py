@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from typing import Dict, Any, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from data.managers.candle_manager import CandleManager
 from data.connectors.rest.factory import RestClientFactory
@@ -11,6 +11,10 @@ from shared.queue.queue_service import QueueService
 from data.database.db import Database
 from shared.domain.dto.candle_dto import CandleDto
 from time_manager import TimeManager
+from strategy.domain.models.market_context import MarketContext
+from shared.domain.dto.signal_dto import SignalDto
+from shared.domain.types.source_type_enum import SourceTypeEnum
+
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +77,7 @@ class BackTestingEngine:
         self.cache_service: Optional[CacheService] = None
         self.queue_service: Optional[QueueService] = None
         self.candle_manager: Optional[CandleManager] = None
-        self.strategy_runner: Optional[StrategyRunner] = None
+        self.strategy_service = None
         self.execution_service = None  # Placeholder for ExecutionService
         self.monitoring_service = None  # Placeholder for BackTestingMonitoringService
         
@@ -139,10 +143,10 @@ class BackTestingEngine:
         self.running = False
         
         # Stop all components
-        if self.candle_manager:
-            await self.candle_manager.stop()
-        if self.strategy_service:
-            await self.strategy_service.stop()
+        # if self.candle_manager:
+        #     await self.candle_manager.stop()
+        # if self.strategy_service:
+        #     await self.strategy_service.stop()
         
         # TODO: Stop execution and monitoring services
         # if self.execution_service:
@@ -151,12 +155,12 @@ class BackTestingEngine:
         #     await self.monitoring_service.stop()
         
         # Close database connection
-        if self.database:
-            await self.database.disconnect()
+        # if self.database:
+        #     await self.database.disconnect()
         
-        # Close cache service
-        if self.cache_service:
-            self.cache_service.close()
+        # # Close cache service
+        # if self.cache_service:
+        #     self.cache_service.close()
         
         self.logger.info("BackTesting Engine stopped")
     
@@ -230,43 +234,101 @@ class BackTestingEngine:
         """
         self.logger.info(f"Loading historical data for {symbol} {timeframe} from {start_time} to {end_time}")
         
-        # TODO: Implement data loading logic
-        # 1. Create RestClient using RestClientFactory
-        # 2. Query data in chunks to handle large time ranges
-        # 3. Use CandleManager to process and normalize data
-        # 4. Validate data quality and handle gaps
-        # 5. Sort candles chronologically
+        try:
+            # Create RestClient using RestClientFactory
+            rest_client = RestClientFactory.create(
+                exchange=exchange,
+                symbol=symbol,
+                interval=timeframe
+            )
+            
+            # Convert datetime to milliseconds
+            start_ts = int(start_time.timestamp() * 1000)
+            end_ts = int(end_time.timestamp() * 1000)
+            current_start = start_ts
+            
+            all_normalized_candles = []
+            
+            # Query data in chunks to handle large time ranges (similar to _fetch_initial_history)
+            while current_start < end_ts - (self._timeframe_to_seconds(timeframe) * 1000):
+                self.logger.info(f"Fetching chunk starting from {datetime.fromtimestamp(current_start/1000, tz=timezone.utc)}")
+                
+                # Fetch chunk of candles (max 1000 per request)
+                raw_data = await rest_client.fetch_candlestick_data(
+                    limit=1000,
+                    startTime=current_start,
+                    endTime=end_ts  # Use end_ts to ensure we don't go beyond our target
+                )
+                
+                if not raw_data:
+                    self.logger.warning(f"No data returned for chunk starting at {current_start}")
+                    break
+
+                normalizer = self.candle_manager._get_rest_normalizer(exchange)
+            
+                normalized_data_list = []
+                # Process each candle in the list
+                for data in raw_data:
+                    # Normalize the data
+                    normalized_candle: CandleDto = await normalizer.normalize_rest_data(
+                        data=data, exchange=exchange, symbol=symbol, interval=timeframe
+                    )
+                    
+                    normalized_data_list.append(normalized_candle)
+                
+                if not normalized_data_list:
+                    self.logger.warning(f"No normalized candles returned for chunk")
+                    break
+                
+                # Add to our collection
+                all_normalized_candles.extend(normalized_data_list)
+                
+                # Update start time for next chunk
+                last_candle_time = normalized_data_list[-1].timestamp
+                if isinstance(last_candle_time, datetime):
+                    current_start = int(last_candle_time.timestamp() * 1000) + (self._timeframe_to_seconds(timeframe) * 1000)
+                else:
+                    # Handle case where timestamp might be a string
+                    last_dt = datetime.fromisoformat(last_candle_time.replace('Z', '+00:00'))
+                    current_start = int(last_dt.timestamp() * 1000) + (self._timeframe_to_seconds(timeframe) * 1000)
+                
+                self.logger.info(f"Loaded {len(normalized_data_list)} candles for {symbol}/{timeframe} (total: {len(all_normalized_candles)})")
+                
+                # Break if we've reached our end time
+                if current_start >= end_ts:
+                    break
+            
+            # Sort candles chronologically to ensure proper order
+            all_normalized_candles.sort(key=lambda x: x.timestamp if isinstance(x.timestamp, datetime) 
+                                       else datetime.fromisoformat(x.timestamp.replace('Z', '+00:00')))
+            
+            #
+            # Store for internal use
+            self.historical_candles = all_normalized_candles
+            self.time_manager.set_total_candles(len(self.historical_candles))
+            
+            self.logger.info(f"Successfully loaded {len(all_normalized_candles)} historical candles for {symbol} {timeframe}")
+            return all_normalized_candles
+            
+        except Exception as e:
+            self.logger.error(f"Error loading historical data for {symbol}/{timeframe}: {e}", exc_info=True)
+            return []
         
-        # Placeholder implementation
-        rest_client = RestClientFactory.create(
-            exchange=exchange,
-            symbol=symbol,
-            interval=timeframe
-        )
+    @staticmethod
+    def _timeframe_to_seconds(timeframe: str) -> int:
+        """
+        Convert timeframe string (e.g., "1h", "4h", "1d") to seconds.
         
-        # TODO: Implement chunked data loading
-        # start_ts = int(start_time.timestamp() * 1000)
-        # end_ts = int(end_time.timestamp() * 1000)
-        # raw_data = await rest_client.fetch_candlestick_data(
-        #     startTime=start_ts,
-        #     endTime=end_ts,
-        #     limit=1500
-        # )
-        
-        # TODO: Process data through CandleManager
-        # normalized_candles = await self.candle_manager.handle_rest_data(
-        #     data_list=raw_data,
-        #     exchange=exchange,
-        #     symbol=symbol,
-        #     interval=timeframe
-        # )
-        
-        # Placeholder return
-        self.historical_candles = []  # TODO: Replace with actual loaded data
-        self.time_manager.set_total_candles(len(self.historical_candles))
-        
-        self.logger.info(f"Loaded {len(self.historical_candles)} historical candles")
-        return self.historical_candles
+        Args:
+            timeframe: Timeframe string
+            
+        Returns:
+            Timeframe duration in seconds
+        """
+        multipliers = {"m": 60, "h": 3600, "d": 86400}
+        unit = timeframe[-1]
+        value = int(timeframe[:-1])
+        return value * multipliers.get(unit, 0)
     
     async def run_backtest(self) -> Dict[str, Any]:
         """
@@ -278,11 +340,14 @@ class BackTestingEngine:
         self.logger.info("Starting backtest execution...")
         
         try:
+            symbol = self.backtest_config.symbol
+            timeframe = self.backtest_config.timeframe
+            exchange = self.backtest_config.exchange
             # Step 1: Load historical data
             candles = await self.load_historical_data(
-                symbol=self.backtest_config.symbol,
-                timeframe=self.backtest_config.timeframe,
-                exchange=self.backtest_config.exchange,
+                symbol=symbol,
+                timeframe=timeframe,
+                exchange=exchange,
                 start_time=self.backtest_config.start_time,
                 end_time=self.backtest_config.end_time
             )
@@ -290,29 +355,43 @@ class BackTestingEngine:
             if not candles:
                 raise ValueError("No historical data loaded")
             
-            # Step 2: Main execution loop
+            # # Step 2: Main execution loop
             self.logger.info(f"Processing {len(candles)} candles...")
             
-            for candle in candles:
+            window_size = 100  # Number of candles to include in each window
+            
+            # Process candles with sliding window approach
+            for i in range(len(candles)):
+                # Create sliding window: start from max(0, i-window_size+1) to i+1
+                window_start = max(0, i - window_size + 1)
+                window_end = i + 1
+                candle_data = candles[window_start:window_end]
+                current_candle = candles[i]
                 # a. Set current simulation time
-                self.time_manager.set_current_time(candle.timestamp)
-                
-                # b. Process candle through data layer
-                # TODO: Direct call to CandleManager.process_candle(candle)
-                
-                # c. Execute strategies
-                signals = []  # TODO: StrategyRunner.execute_strategies(candle_data)
-                
-                # d. Process signals through execution layer
+                self.time_manager.set_current_time(current_candle.timestamp)
+                                
+                # b. Execute strategies
+                signals = []
+                await self.strategy_service.strategy_runner.context_engine.update_context(symbol, timeframe, candle_data, exchange)
+
+                market_contexts: List[MarketContext] = await self.strategy_service.strategy_runner.context_engine.get_multi_timeframe_contexts(symbol, timeframe, exchange)
+                if not market_contexts:
+                    logger.info(f"Incomplete MTF context for {symbol} {timeframe}. Skipping strategy execution.")
+                    continue
+
+                result : List[SignalDto] = await self.strategy_service.strategy_runner.execute_strategies(candle_data, market_contexts, SourceTypeEnum.HISTORICAL)
+                if not result:
+                    logger.info("NO signals generated")
+                    continue
+                signals.extend(result)
+
+                # c. Process signals through execution layer
                 orders = []  # TODO: ExecutionService.process_signals(signals)
                 
-                # e. Check orders against current market data
-                # TODO: BackTestingMonitoringService.check_orders(candle, portfolio)
-                
-                # f. Update portfolio state
+                # d. Update portfolio state
                 # TODO: BackTestingMonitoringService.update_portfolio_state()
                 
-                # g. Advance to next candle
+                # e. Advance to next candle
                 self.time_manager.advance_to_next_candle()
                 
                 # Log progress periodically
@@ -320,11 +399,10 @@ class BackTestingEngine:
                     progress = self.time_manager.get_progress()
                     self.logger.info(f"Backtest progress: {progress:.1f}%")
             
-            # Step 3: Generate final report
-            # TODO: results = BackTestingMonitoringService.generate_final_report()
+            # # Step 3: Generate final report
+            # # TODO: results = BackTestingMonitoringService.generate_final_report()
             results = {}  # Placeholder
-            
-            self.logger.info("Backtest execution completed successfully")
+            self.logger.info(f"Backtest execution completed successfully, signals generated: {signals}")
             return results
             
         except Exception as e:
