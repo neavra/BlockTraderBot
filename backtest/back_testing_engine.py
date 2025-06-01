@@ -10,9 +10,43 @@ from shared.cache.cache_service import CacheService
 from shared.queue.queue_service import QueueService
 from data.database.db import Database
 from shared.domain.dto.candle_dto import CandleDto
-from backtest.time_manager import TimeManager
+from time_manager import TimeManager
 
 logger = logging.getLogger(__name__)
+
+class BackTestConfiguration:
+    """Configuration for backtesting parameters."""
+    
+    def __init__(
+        self,
+        symbol: str,
+        timeframe: str,
+        exchange: str,
+        start_time: datetime,
+        end_time: datetime,
+        initial_capital: float = 100000.0,
+        **kwargs
+    ):
+        """
+        Initialize backtest configuration.
+        
+        Args:
+            symbol: Trading symbol
+            timeframe: Candle timeframe
+            exchange: Exchange name
+            start_time: Backtest start time
+            end_time: Backtest end time
+            initial_capital: Starting capital for backtesting
+            **kwargs: Additional configuration parameters
+        """
+        self.symbol = symbol
+        self.timeframe = timeframe
+        self.exchange = exchange
+        self.start_time = start_time
+        self.end_time = end_time
+        self.initial_capital = initial_capital
+        self.config = kwargs
+
 
 class BackTestingEngine:
     """
@@ -20,7 +54,7 @@ class BackTestingEngine:
     Entry point that initializes all dependencies and manages the backtesting process.
     """
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], backtest_config: BackTestConfiguration):
         """
         Initialize the backtesting engine.
         
@@ -29,6 +63,7 @@ class BackTestingEngine:
             backtest_config: Backtesting-specific configuration
         """
         self.config = config
+        self.backtest_config = backtest_config
         self.running = False
         self.logger = logging.getLogger("BackTestingEngine")
         
@@ -39,8 +74,8 @@ class BackTestingEngine:
         self.queue_service: Optional[QueueService] = None
         self.candle_manager: Optional[CandleManager] = None
         self.strategy_runner: Optional[StrategyRunner] = None
-        self.execution_service = None
-        self.monitoring_service = None
+        self.execution_service = None  # Placeholder for ExecutionService
+        self.monitoring_service = None  # Placeholder for BackTestingMonitoringService
         
         # Data storage
         self.historical_candles: List[CandleDto] = []
@@ -75,8 +110,8 @@ class BackTestingEngine:
         # Initialize candle manager with backtesting configuration
         await self._init_candle_manager()
         
-        # Initialize strategy runner with backtesting dependencies
-        await self._init_strategy_runner()
+        # Initialize strategy service with backtesting dependencies
+        await self._init_strategy_service()
         
         # Initialize execution service (placeholder)
         await self._init_execution_service()
@@ -86,14 +121,13 @@ class BackTestingEngine:
         
         # Step 2: Start all components
         await self.candle_manager.start()
-        await self.strategy_runner.start()
+        await self.strategy_service.start()
         
         # TODO: Start execution and monitoring services
         # await self.execution_service.start()
         # await self.monitoring_service.start()
         
         self.logger.info("BackTesting Engine started successfully")
-    
     
     async def stop(self):
         """Stop the backtesting engine and clean up resources."""
@@ -107,8 +141,8 @@ class BackTestingEngine:
         # Stop all components
         if self.candle_manager:
             await self.candle_manager.stop()
-        if self.strategy_runner:
-            await self.strategy_runner.stop()
+        if self.strategy_service:
+            await self.strategy_service.stop()
         
         # TODO: Stop execution and monitoring services
         # if self.execution_service:
@@ -139,26 +173,19 @@ class BackTestingEngine:
             config=backtest_data_config
         )
     
-    async def _init_strategy_runner(self):
-        """Initialize the strategy runner with backtesting dependencies."""
-        self.logger.info("Initializing StrategyRunner for backtesting...")
+    async def _init_strategy_service(self):
+        """Initialize the strategy service with backtesting dependencies."""
+        self.logger.info("Initializing StrategyService for backtesting...")
         
-        # TODO: Initialize strategies, context engine, mitigation service
-        # TODO: Use backtesting cache and queue services
+        # Import StrategyService
+        from strategy.strategy_service import StrategyService
         
-        # Placeholder initialization
-        strategies = []  # TODO: Load strategies from config
-        context_engine = None  # TODO: Initialize ContextEngine
-        signal_repository = None  # TODO: Initialize with database
-        
-        self.strategy_runner = StrategyRunner(
-            strategies=strategies,
+        # Initialize StrategyService with backtesting configuration
+        # StrategyService will handle initialization of ContextEngine, MitigationService, and StrategyRunner
+        self.strategy_service = StrategyService(
             cache_service=self.cache_service,
             producer_queue=self.queue_service,  # Disabled for backtesting
             consumer_queue=self.queue_service,  # Disabled for backtesting
-            context_engine=context_engine,
-            database=self.database,
-            signal_repository=signal_repository,
             config=self.config
         )
     

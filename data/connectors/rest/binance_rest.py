@@ -6,7 +6,7 @@ import logging
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 
-from managers.candle_manager import CandleManager
+from data.managers.candle_manager import CandleManager
 
 from .base import RestClient
 from shared.domain.dto.candle_dto import CandleDto
