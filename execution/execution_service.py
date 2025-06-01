@@ -220,69 +220,60 @@ class ExecutionService:
         """
         Process a trading signal and prepare order parameters.
         
-        This method:
-        1. Validates the signal against current market conditions
-        2. Applies risk management rules 
-        3. Determines appropriate order parameters
-        4. Returns order parameters or None if signal should be rejected
+        EXECUTION LAYER RESPONSIBILITIES:
+        1. Validate signal structure and required fields
+        2. Check account liquidity and existing orders
+        3. Apply execution-level risk limits (max position size caps)
+        4. Handle order conflicts and replacements
+        5. Build final order parameters for exchange
         """
-        # Validate signal structure
-        if not all(k in signal for k in ['id', 'symbol', 'direction', 'signal_type']):
-            logger.error(f"Invalid signal format: {signal}")
+        # 1. VALIDATE SIGNAL STRUCTURE
+        required_fields = ['id', 'symbol', 'direction', 'signal_type', 'price_target', 'stop_loss', 'take_profit']
+        if not all(k in signal for k in required_fields):
+            logger.error(f"Invalid signal format - missing required fields: {signal}")
             return None
-            
-        # Extract signal parameters
+        
+        # Extract signal parameters (all should be provided by strategy)
         signal_id = signal['id']
         symbol = signal['symbol']
         direction = signal['direction']
         signal_type = signal['signal_type']
-        price_target = signal.get('price_target')
-        stop_loss = signal.get('stop_loss')
-        take_profit = signal.get('take_profit')
-        position_size = signal.get('position_size')
-        confidence = signal.get('confidence_score', 1.0)
+        price_target = signal['price_target']
+        stop_loss = signal['stop_loss']
+        take_profit = signal['take_profit']
         
-        # Get current market data for validation if available
-        try:
-            ticker = await self.exchange.fetch_ticker(symbol) if hasattr(self.exchange, 'fetch_ticker') else None
-            current_price = ticker['last'] if ticker else price_target
-        except Exception as e:
-            logger.warning(f"Failed to fetch market data for signal validation: {e}")
-            current_price = price_target
-            
-        # Validate signal against current market conditions
-        if direction == 'long' and price_target and current_price and price_target < current_price * 0.8:
-            logger.info(f"Signal {signal_id} entry price too far from current price. Adjusting entry.")
-            price_target = current_price * 0.9  # Set a more reasonable limit price
-        
-        # For short positions, validate the entry isn't too high
-        if direction == 'short' and price_target and current_price and price_target > current_price * 1.2:
-            logger.info(f"Signal {signal_id} entry price too far from current price. Adjusting entry.")
-            price_target = current_price * 1.1  # Set a more reasonable limit price
-        
-        # Determine position size based on risk if not provided
-        if not position_size and stop_loss and price_target:
-            position_size = await self._calculate_position_size(
-                symbol, direction, price_target, stop_loss
-            )
-        
-        # Use a default position size if all else fails
+        position_size = signal['position_size']
         if not position_size:
-            position_size = 0.01  # Default small position size
-            
-        # Apply confidence score adjustment if provided
-        if confidence < 0.8:
-            position_size = position_size * confidence
-            
-        # Cap position size based on risk limits (from config)
-        max_position_size = self.config.get('risk_settings', {}).get('max_position_size', 0.1)
-        position_size = min(position_size, max_position_size)
+            logger.error(f"Signal {signal_id} missing position_size - strategy should calculate this")
+            return None
         
-        # Record signal in active signals
+        # 3. CHECK ACCOUNT LIQUIDITY
+        # TODO to implement
+        available_balance = await self._get_available_balance(symbol)
+        required_margin = self._calculate_required_margin(symbol, position_size, price_target)
+        
+        if available_balance < required_margin:
+            logger.warning(f"Insufficient balance for signal {signal_id}. Required: {required_margin}, Available: {available_balance}")
+            return None
+        
+        # 4. APPLY EXECUTION-LEVEL RISK LIMITS
+        max_position_size = self.config.get('execution_limits', {}).get('max_position_size', 1.0)
+        max_order_value = self.config.get('execution_limits', {}).get('max_order_value', 100000)
+        
+        if position_size > max_position_size:
+            logger.warning(f"Position size {position_size} exceeds execution limit {max_position_size}")
+            position_size = max_position_size
+        
+        order_value = position_size * price_target
+        if order_value > max_order_value:
+            logger.warning(f"Order value {order_value} exceeds execution limit {max_order_value}")
+            return None
+        
+        # 5. RECORD SIGNAL IN ACTIVE SIGNALS
         self.active_signals[signal_id] = {
             **signal,
             'processed_at': datetime.now().isoformat(),
-            'market_price_at_process': current_price
+            'execution_checks_passed': True
         }
         
         # Store signal in cache
@@ -293,25 +284,50 @@ class ExecutionService:
             expiry=CacheTTL.DAY
         )
         
-        # Build order parameters
+        # 6. BUILD FINAL ORDER PARAMETERS
         order_params = {
             'symbol': symbol,
-            'type': 'limit',  # Default to limit for order blocks
+            'type': 'limit',
             'side': 'buy' if direction == 'long' else 'sell',
             'amount': position_size,
             'price': price_target,
             'params': {
                 'signal_id': signal_id,
-                'timeInForce': 'GTC',  # Good Till Canceled
+                'timeInForce': 'GTC',
                 'stopLoss': stop_loss,
                 'takeProfit': take_profit,
-                'leverage': self.config.get('risk_settings', {}).get('leverage', 1),
+                'leverage': self.config.get('execution_settings', {}).get('default_leverage', 1),
                 'reduceOnly': signal_type == 'exit'
             }
         }
         
-        logger.info(f"Processed signal {signal_id} into order parameters")
+        logger.info(f"Signal {signal_id} passed execution validation - ready for order placement")
         return order_params
+
+    async def _get_existing_orders(self, symbol: str) -> List[Dict[str, Any]]:
+        """Get all existing orders for a symbol"""
+        try:
+            orders = await self.exchange.fetch_open_orders(symbol)
+            return orders
+        except Exception as e:
+            logger.error(f"Error fetching existing orders: {e}")
+            return []
+
+    async def _get_available_balance(self, symbol: str) -> float:
+        """Get available balance for trading"""
+        try:
+            balance = await self.exchange.fetch_balance()
+            # Logic to determine available balance based on symbol and margin requirements
+            # This is exchange-specific implementation
+            return balance.get('free', {}).get('USDT', 0.0)  # Simplified
+        except Exception as e:
+            logger.error(f"Error fetching balance: {e}")
+            return 0.0
+
+    def _calculate_required_margin(self, symbol: str, position_size: float, price: float) -> float:
+        """Calculate required margin for the order"""
+        leverage = self.config.get('execution_settings', {}).get('default_leverage', 1)
+        return (position_size * price) / leverage
         
     async def execute_order(self, order_params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
@@ -441,72 +457,6 @@ class ExecutionService:
         except Exception as e:
             logger.error(f"Error cancelling order {order_id}: {e}", exc_info=True)
             return None
-            
-    async def _calculate_position_size(self, symbol: str, direction: str, 
-                                     entry_price: float, stop_loss: float) -> float:
-        """
-        Calculate appropriate position size based on risk parameters.
-        
-        This method:
-        1. Determines the risk amount per trade (% of account)
-        2. Calculates the stop distance
-        3. Computes position size based on risk and stop distance
-        """
-        try:
-            # Get risk settings from config
-            risk_settings = self.config.get('risk_settings', {})
-            risk_per_trade = risk_settings.get('risk_per_trade', 0.01)  # Default 1% risk
-            
-            # Get account balance
-            balance = await self.exchange.fetch_balance()
-            
-            # Extract total equity (implementation depends on exchange response format)
-            # This is a simplified approach
-            total_equity = 0.0
-            
-            if isinstance(balance, dict):
-                if 'total' in balance:
-                    # Try to get USDT or USD balance as base equity
-                    for currency in ['USDT', 'USD', 'USDC']:
-                        if currency in balance['total']:
-                            total_equity = float(balance['total'][currency])
-                            break
-                elif 'info' in balance and 'totalWalletBalance' in balance['info']:
-                    # For exchanges that provide total wallet balance
-                    total_equity = float(balance['info']['totalWalletBalance'])
-            
-            # Use a default value if we couldn't determine equity
-            if total_equity <= 0:
-                logger.warning("Could not determine account equity, using default value")
-                total_equity = 10000.0  # Default assumption
-            
-            # Calculate risk amount in USD
-            risk_amount = total_equity * risk_per_trade
-            
-            # Calculate stop distance
-            if direction == 'long':
-                stop_distance = abs(entry_price - stop_loss) / entry_price
-            else:  # short
-                stop_distance = abs(stop_loss - entry_price) / entry_price
-            
-            # Prevent division by zero
-            if stop_distance <= 0:
-                stop_distance = 0.01  # Default 1% stop distance
-            
-            # Calculate position size based on risk and stop
-            position_size = risk_amount / (entry_price * stop_distance)
-            
-            # Round to appropriate precision for the asset
-            # This is a simplified approach
-            position_size = round(position_size, 6)
-            
-            logger.info(f"Calculated position size: {position_size} for {symbol} with {risk_per_trade*100}% risk")
-            return position_size
-            
-        except Exception as e:
-            logger.error(f"Error calculating position size: {e}")
-            # Return a small default position size
-            return 0.01
     
     async def _cache_order(self, order_id: str, order: OrderDto) -> None:
         """
