@@ -190,7 +190,8 @@ class BackTestingEngine:
             cache_service=self.cache_service,
             producer_queue=self.queue_service,  # Disabled for backtesting
             consumer_queue=self.queue_service,  # Disabled for backtesting
-            config=self.config
+            config=self.config,
+            is_backtest=True,
         )
     
     async def _init_execution_service(self):

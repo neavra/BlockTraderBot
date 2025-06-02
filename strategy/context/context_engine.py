@@ -1,4 +1,5 @@
 import logging
+import copy
 import asyncio
 from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
@@ -112,6 +113,7 @@ class ContextEngine:
             existing_context = MarketContext.from_dict(cached_context_data)
 
         # Note here, that the existing_context object is being edited directly, no new object is created
+        original_context = copy.deepcopy(existing_context) if not is_first_time else None
         context = existing_context
         updated_flag = False
         for analyzer_type, analyzer in self.analyzers.items():
@@ -140,7 +142,7 @@ class ContextEngine:
         elif updated_flag:
             self.cache_service.set(cache_key, context.to_dict(), expiry=CacheTTL.MARKET_STATE)
             try:
-                await self._store_context_history(existing_context)
+                await self._store_context_history(original_context)
             except Exception as e:
                 logger.error(f"Error storing historical context: {e}")
 
