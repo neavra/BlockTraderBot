@@ -21,7 +21,7 @@ class FVGIndicator(Indicator):
     - Bearish FVG: High of a candle is below the low of the candle two positions back
     """
     
-    def __init__(self, repository: FvgRepository, params: Dict[str, Any] = None):
+    def __init__(self, repository: FvgRepository, params: Dict[str, Any] = None, is_backtest: bool = False):
         """
         Initialize FVG detector with parameters
         
@@ -30,6 +30,7 @@ class FVGIndicator(Indicator):
                 - min_gap_size: Minimum gap size as percentage (default: 0.2%)
         """
 
+        self.is_backtest = is_backtest
         self.repository = repository
 
         default_params = {
@@ -73,8 +74,8 @@ class FVGIndicator(Indicator):
                 bearish_fvgs=[]
             )
         
-        bullish_fvgs = []
-        bearish_fvgs = []
+        bullish_fvgs: List[FvgDto] = []
+        bearish_fvgs: List[FvgDto] = []
         
         # Minimum gap size as decimal
         min_gap_pct = self.params['min_gap_size'] / 100.0
@@ -148,6 +149,9 @@ class FVGIndicator(Indicator):
         # Filter out FVGs that have been filled by subsequent price action
         self._filter_filled_by_price_action(candles, bullish_fvgs, bearish_fvgs)
         
+        if(len(bullish_fvgs) > 0 or len(bearish_fvgs) > 0):
+            logger.info(f"Found {len(bullish_fvgs)} bullish_fvgs and {len(bearish_fvgs)} bearish_fvgs")
+        
         # Save detected FVGs to the database
         try:
             # Prepare FVGs for database insertion
@@ -181,7 +185,7 @@ class FVGIndicator(Indicator):
                 fvgs_data.append(fvg_data)
             
             # Bulk insert the FVGs
-            if fvgs_data:
+            if fvgs_data and not self.is_backtest:
                 created_fvgs = await self.repository.bulk_create_fvgs(fvgs_data)
                 logger.info(f"Saved {len(created_fvgs)} FVGs to database")
                 

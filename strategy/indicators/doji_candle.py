@@ -17,7 +17,7 @@ class DojiCandleIndicator(Indicator):
     relative to its range (high and low). It indicates market indecision and potential reversal points.
     """
     
-    def __init__(self, repository: DojiRepository, params: Dict[str, Any] = None):
+    def __init__(self, repository: DojiRepository, params: Dict[str, Any] = None, is_backtest: bool = False):
         """
         Initialize Doji candle detector with parameters
         
@@ -27,6 +27,7 @@ class DojiCandleIndicator(Indicator):
                 - min_range_to_price_ratio: Minimum candle range relative to price for significance
                 - lookback_period: Number of candles to analyze
         """
+        self.is_backtest = is_backtest
         self.repository = repository
 
         default_params = {
@@ -72,7 +73,7 @@ class DojiCandleIndicator(Indicator):
             )
         
         lookback_period = min(self.params['lookback_period'], len(candles))
-        dojis = []
+        dojis : List[DojiDto] = []
         
         # Process each candle in the lookback period (from most recent)
         for i in range(1, lookback_period + 1):
@@ -120,7 +121,8 @@ class DojiCandleIndicator(Indicator):
         
         # Sort dojis by index (most recent first)
         dojis.sort(key=lambda x: x.index, reverse=True)
-        
+        if len(dojis) > 0:
+            logger.info(f"Found {len(dojis)} dojis")
         # Save detected doji patterns to the database
         try:
             if dojis:
@@ -152,7 +154,7 @@ class DojiCandleIndicator(Indicator):
                     doji_records.append(doji_data)
                 
                 # Bulk create the records
-                if doji_records:
+                if doji_records and not self.is_backtest:
                     created_records = await self.repository.bulk_create_dojis(doji_records)
                     logger.info(f"Saved {len(created_records)} doji patterns to database")
         except Exception as e:

@@ -24,7 +24,7 @@ class StructureBreakIndicator(Indicator):
     4. Lower High (LH): Price creates a high that's lower than the previous swing high
     """
     
-    def __init__(self, repository: BosRepository, params: Dict[str, Any] = None):
+    def __init__(self, repository: BosRepository, params: Dict[str, Any] = None, is_backtest: bool = False):
         """
         Initialize Breaking of Structure detector with parameters
         
@@ -34,6 +34,7 @@ class StructureBreakIndicator(Indicator):
                 - confirmation_candles: Number of candles to confirm break (default: 1)
                 - min_break_percentage: Minimum percentage break beyond structure (default: 0.05%)
         """
+        self.is_backtest = is_backtest
         self.repository = repository
 
         default_params = {
@@ -56,7 +57,7 @@ class StructureBreakIndicator(Indicator):
         If BOS is found in a lower timeframe, there's no need to check higher timeframes.
         """
         candles: List[CandleDto] = data.get("candles")
-        market_contexts = data.get("market_contexts", [])
+        market_contexts: List[MarketContext] = data.get("market_contexts", [])
         
         # Extract market data information
         symbol = data.get("symbol")
@@ -74,8 +75,8 @@ class StructureBreakIndicator(Indicator):
             return self._get_empty_result()
         
         # Initialize result containers
-        bullish_breaks = []
-        bearish_breaks = []
+        bullish_breaks: List[StructureBreakDto] = []
+        bearish_breaks: List[StructureBreakDto] = []
         
         # Check each market context until we find structure breaks
         for market_context in market_contexts:
@@ -155,9 +156,10 @@ class StructureBreakIndicator(Indicator):
                     bos_records.append(bos_data)
                 
                 # Bulk create the records
-                if bos_records:
+                if bos_records and not self.is_backtest:
                     created_records = await self.repository.bulk_create_bos(bos_records)
                     logger.info(f"Saved {len(created_records)} structure breaks to database")
+                
         except Exception as e:
             logger.error(f"Error saving structure breaks to database: {e}")
         

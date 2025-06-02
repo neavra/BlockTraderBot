@@ -659,5 +659,5 @@ class OrderBlockStrategy(Strategy):
         return {
             'lookback_period': 50,
             'timeframes': ['15m', '1h', '4h', '1d'],
-            'indicators': ['order_block', 'fvg', 'structure_break', 'doji_candle']
+            'indicators': [IndicatorType.ORDER_BLOCK, IndicatorType.FVG, IndicatorType.STRUCTURE_BREAK, IndicatorType.DOJI_CANDLE]
         }

@@ -22,8 +22,9 @@ from data.database.db import Database
 class IndicatorFactory:
     """Factory for creating indicator instances with their repositories."""
 
-    def __init__(self, database: Database):
+    def __init__(self, database: Database, is_backtest: bool = False):
         """Initialize the factory with indicator and repository mappings."""
+        self.is_backtest = is_backtest
         self.database = database
         session=self.database.get_session()
         
@@ -63,7 +64,7 @@ class IndicatorFactory:
         indicator_class = self._indicators[name]
         repository = self._indicator_repository_map.get(name)
 
-        return indicator_class(repository=repository, params=params)
+        return indicator_class(repository=repository, params=params, is_backtest=self.is_backtest)
 
     def register_indicator(self, name: IndicatorType, indicator_class: Type[Indicator], repository_instance: Any):
         """Register a new indicator class with its repository."""

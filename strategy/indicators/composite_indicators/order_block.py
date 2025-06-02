@@ -30,7 +30,7 @@ class OrderBlockIndicator(Indicator):
     If multiple doji candles exist before an FVG, the later one is selected.
     """
     
-    def __init__(self, repository: OrderBlockRepository, params: Dict[str, Any] = None):
+    def __init__(self, repository: OrderBlockRepository, params: Dict[str, Any] = None, is_backtest: bool = False):
         """
         Initialize order block detector with parameters
         
@@ -45,6 +45,7 @@ class OrderBlockIndicator(Indicator):
                 - mitigation_threshold: Percentage of zone that must be mitigated to invalidate (default: 0.5)
         """
 
+        self.is_backtest = is_backtest
         self.repository = repository
 
         default_params = {
@@ -121,6 +122,9 @@ class OrderBlockIndicator(Indicator):
             timeframe, symbol, exchange, candles, doji_candles, bullish_fvgs, bearish_fvgs, bullish_bos, bearish_bos
         )
         
+        if len(demand_blocks) > 0 or len(supply_blocks) > 0:
+            logger.info(f"Found {len(demand_blocks)} demand blocks and {len(supply_blocks)} supply blocks")
+        
         # Sort blocks by index (most recent first)
         demand_blocks.sort(key=lambda x: x.index, reverse=True)
         supply_blocks.sort(key=lambda x: x.index, reverse=True)
@@ -164,7 +168,7 @@ class OrderBlockIndicator(Indicator):
                 order_blocks_data.append(block_data)
             
             # Bulk insert the order blocks
-            if order_blocks_data:
+            if order_blocks_data and not self.is_backtest:
                 created_blocks = await self.repository.bulk_create_order_blocks(order_blocks_data)
                 logger.info(f"Saved {len(created_blocks)} order blocks to database")
                 

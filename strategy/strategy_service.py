@@ -32,7 +32,8 @@ class StrategyService:
         consumer_queue: QueueService, 
         producer_queue: QueueService,
         cache_service: CacheService,
-        config: Dict[str, Any]
+        config: Dict[str, Any],
+        is_backtest: bool=False
     ):
         """
         Initialize the strategy service.
@@ -51,6 +52,7 @@ class StrategyService:
         self.cache_service = cache_service
         self.config = config
         self.running = False
+        self.is_backtest = is_backtest
         
         # Components to be initialized in start()
         self.indicators = {}
@@ -136,7 +138,10 @@ class StrategyService:
         logger.info("Initializing indicators...")
         
         # Create indicator factory
-        indicator_factory = IndicatorFactory(self.database)
+        indicator_factory = IndicatorFactory(
+            database=self.database,
+            is_backtest=self.is_backtest
+            )
         
         # Get indicator configurations
         indicator_configs = self.config.get('strategy', {}).get('indicators', {})
