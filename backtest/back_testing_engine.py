@@ -1,4 +1,5 @@
 import asyncio
+import time
 import logging
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
@@ -338,6 +339,7 @@ class BackTestingEngine:
         Returns:
             Backtesting results and performance metrics
         """
+        total_start_time = time.time()
         self.logger.info("Starting backtest execution...")
         
         try:
@@ -345,6 +347,7 @@ class BackTestingEngine:
             timeframe = self.backtest_config.timeframe
             exchange = self.backtest_config.exchange
             # Step 1: Load historical data
+            data_load_start_time = time.time()
             candles = await self.load_historical_data(
                 symbol=symbol,
                 timeframe=timeframe,
@@ -352,11 +355,14 @@ class BackTestingEngine:
                 start_time=self.backtest_config.start_time,
                 end_time=self.backtest_config.end_time
             )
+            data_load_end_time = time.time()
+            data_load_duration = data_load_end_time - data_load_start_time
             
             if not candles:
                 raise ValueError("No historical data loaded")
             
             # # Step 2: Main execution loop
+            processing_start_time = time.time()
             self.logger.info(f"Processing {len(candles)} candles...")
             
             window_size = 100  # Number of candles to include in each window
@@ -400,7 +406,26 @@ class BackTestingEngine:
                     progress = self.time_manager.get_progress()
                     self.logger.info(f"Backtest progress: {progress:.1f}%")
             
+            processing_end_time = time.time()
+            processing_duration = processing_end_time - processing_start_time
+            total_duration = time.time() - total_start_time
             # # Step 3: Generate final report
+            self.logger.info("=" * 80)
+            self.logger.info("BACKTEST EXECUTION COMPLETED SUCCESSFULLY")
+            self.logger.info("=" * 80)
+            self.logger.info(f"Symbol: {symbol} | Timeframe: {timeframe} | Exchange: {exchange}")
+            self.logger.info(f"Period: {self.backtest_config.start_time} to {self.backtest_config.end_time}")
+            self.logger.info("-" * 80)
+            self.logger.info("TIMING BREAKDOWN:")
+            self.logger.info(f"  Data Loading:        {data_load_duration:.2f} seconds")
+            self.logger.info(f"  Strategy Processing: {processing_duration:.2f} seconds")
+            self.logger.info(f"  Total Execution:     {total_duration:.2f} seconds")
+            self.logger.info("-" * 80)
+            self.logger.info("PERFORMANCE METRICS:")
+            self.logger.info(f"  Candles Processed:   {len(candles):,}")
+            self.logger.info(f"  Signals Generated:   {len(signals)}")
+            self.logger.info(f"  Avg Time/Candle:     {(processing_duration/len(candles))*1000:.2f} ms")
+            self.logger.info(f"  Processing Rate:     {len(candles)/processing_duration:.1f} candles/second")
             # # TODO: results = BackTestingMonitoringService.generate_final_report()
             results = {}  # Placeholder
             self.logger.info(f"Backtest execution completed successfully, signals generated: {signals}")
