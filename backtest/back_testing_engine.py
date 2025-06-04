@@ -365,7 +365,7 @@ class BackTestingEngine:
             processing_start_time = time.time()
             self.logger.info(f"Processing {len(candles)} candles...")
             
-            window_size = 100  # Number of candles to include in each window
+            window_size = 50  # Number of candles to include in each window
             
             # Process candles with sliding window approach
             for i in range(len(candles)):

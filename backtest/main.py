@@ -39,13 +39,6 @@ async def run_service(
         # Run the backtest
         results = await backtesting_engine.run_backtest()
         
-        # Log results summary
-        logger.info("=" * 60)
-        logger.info("BACKTESTING COMPLETED SUCCESSFULLY")
-        logger.info("=" * 60)
-        logger.info(f"Results: {results}")
-        logger.info("=" * 60)
-        
         return results
         
     except Exception as e:
