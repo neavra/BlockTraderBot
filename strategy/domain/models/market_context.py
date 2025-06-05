@@ -15,7 +15,7 @@ class MarketContext:
     exchange: str = "default"
     
     # Basic info
-    timestamp: Optional[datetime] = None
+    timestamp: Optional[str] = None  # Store as ISO string
     current_price: Optional[float] = None
     
     # Swing points
@@ -32,12 +32,12 @@ class MarketContext:
     is_in_range: bool = False
     range_size: Optional[float] = None
     range_strength: Optional[float] = None
-    range_detected_at: Optional[str] = None
+    range_detected_at: Optional[str] = None  # Store as ISO string
     
     # Fibonacci levels
     fib_levels: Dict[str, List[Dict[str, Any]]] = field(default_factory=lambda: {"support": [], "resistance": []})
     
-    # Metadata
+    # Metadata - Store as timestamp float
     last_updated: float = field(default_factory=lambda: datetime.now().timestamp())
     
     # Computed property (post-init)
@@ -47,6 +47,10 @@ class MarketContext:
         """Initialize computed properties after data class initialization"""
         # Use the standalone function instead of the enum method
         self.timeframe_category = get_timeframe_category(self.timeframe)
+        
+        # Ensure timestamp is set as ISO string
+        if self.timestamp is None:
+            self.timestamp = datetime.now().isoformat()
     
     # Basic info methods
     def set_current_price(self, price: float):
@@ -60,13 +64,13 @@ class MarketContext:
 
     # Swing point methods
     def set_swing_high(self, swing_high: Dict[str, Any]):
-        """Set new swing high"""
-        self.swing_high = swing_high
+        """Set new swing high with proper serialization"""
+        self.swing_high = self._serialize_swing_point(swing_high) if swing_high else None
         return self
 
     def set_swing_low(self, swing_low: Dict[str, Any]):
-        """Set new swing low"""
-        self.swing_low = swing_low
+        """Set new swing low with proper serialization"""
+        self.swing_low = self._serialize_swing_point(swing_low) if swing_low else None
         return self
 
     # Trend methods
@@ -86,7 +90,8 @@ class MarketContext:
         self.range_low = low
         self.range_equilibrium = equilibrium
         self.range_strength = strength
-        self.range_detected_at = timestamp or datetime.now().isoformat()
+        # Always store as ISO string
+        self.range_detected_at = timestamp if timestamp else datetime.now().isoformat()
 
         # Calculate range size as percentage of lower bound
         self.range_size = (high - low) / low if low > 0 else 0
@@ -147,16 +152,34 @@ class MarketContext:
         # Return the closest level
         return min(valid_levels, key=lambda x: x.get('distance', float('inf')))
 
+    def _serialize_swing_point(self, swing_point: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Helper to serialize swing point data - convert ALL datetime fields to ISO strings
+        """
+        if not swing_point or not isinstance(swing_point, dict):
+            return swing_point
+        
+        swing_copy = swing_point.copy()
+        
+        # List of known datetime fields in swing points
+        datetime_fields = ['timestamp', 'expiry', 'created_at', 'updated_at']
+        
+        for field in datetime_fields:
+            if field in swing_copy and isinstance(swing_copy[field], datetime):
+                swing_copy[field] = swing_copy[field].isoformat()
+        
+        return swing_copy
+
     def to_dict(self) -> Dict[str, Any]:
-        """Convert context to dictionary for storage"""
+        """Convert context to dictionary for storage - all datetime objects converted to strings"""
         return {
             'symbol': self.symbol,
             'timeframe': self.timeframe,
             'exchange': self.exchange,
-            'timestamp': self.timestamp.isoformat() if isinstance(self.timestamp, datetime) else self.timestamp,
+            'timestamp': self.timestamp,  # Already a string
             'current_price': self.current_price,
-            'swing_high': self._serialize_swing_point(self.swing_high),
-            'swing_low': self._serialize_swing_point(self.swing_low),
+            'swing_high': self.swing_high,  # Already serialized in setter
+            'swing_low': self.swing_low,    # Already serialized in setter
             'trend': self.trend,
             'range_high': self.range_high,
             'range_low': self.range_low,
@@ -164,23 +187,11 @@ class MarketContext:
             'is_in_range': self.is_in_range,
             'range_size': self.range_size,
             'range_strength': self.range_strength,
-            'range_detected_at': self.range_detected_at.isoformat() if isinstance(self.range_detected_at, datetime) else self.range_detected_at,
+            'range_detected_at': self.range_detected_at,  # Already a string
             'fib_levels': self.fib_levels,
-            'last_updated': self.last_updated
+            'last_updated': self.last_updated,  # Keep as float timestamp
+            'timeframe_category': self.timeframe_category.value if hasattr(self.timeframe_category, 'value') else str(self.timeframe_category)
         }
-    
-    def _serialize_swing_point(self, swing_point):
-        """Helper to serialize swing point data"""
-        if not swing_point:
-            return swing_point
-        
-        if isinstance(swing_point, dict) and 'timestamp' in swing_point:
-            swing_copy = swing_point.copy()
-            if isinstance(swing_copy['timestamp'], datetime):
-                swing_copy['timestamp'] = swing_copy['timestamp'].isoformat()
-            return swing_copy
-        
-        return swing_point
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'MarketContext':
@@ -193,10 +204,8 @@ class MarketContext:
         Returns:
             MarketContext object
         """
-        from datetime import datetime
-        
-        def parse_datetime(value):
-            """Helper function to parse datetime from various formats"""
+        def parse_datetime_for_swing(value):
+            """Helper function to parse datetime from various formats for swing points"""
             if value is None:
                 return None
             if isinstance(value, datetime):
@@ -226,9 +235,11 @@ class MarketContext:
             # Create a copy to avoid modifying original data
             parsed_swing = swing_data.copy()
             
-            # Parse timestamp in swing point if it exists
-            if 'timestamp' in parsed_swing:
-                parsed_swing['timestamp'] = parse_datetime(parsed_swing['timestamp'])
+            # Parse datetime fields in swing point if they exist
+            datetime_fields = ['timestamp', 'expiry', 'created_at', 'updated_at']
+            for field in datetime_fields:
+                if field in parsed_swing:
+                    parsed_swing[field] = parse_datetime_for_swing(parsed_swing[field])
             
             return parsed_swing
         
@@ -236,32 +247,36 @@ class MarketContext:
         context = cls(
             symbol=data.get('symbol'),
             timeframe=data.get('timeframe'),
-            exchange=data.get('exchange')
+            exchange=data.get('exchange', 'default')
         )
         
-        # Set all the attributes from the dictionary with proper type conversion
-        context.id = data.get('id')
-        context.timestamp = data.get('timestamp')  # Keep as string for ISO format
-        context.last_updated = data.get('last_updated')  # Keep as timestamp float
+        # Set all the attributes from the dictionary
+        context.timestamp = data.get('timestamp')  # Keep as string
+        context.last_updated = data.get('last_updated', datetime.now().timestamp())  # Keep as float
         context.current_price = data.get('current_price')
         
         # Parse swing points with datetime conversion
         context.swing_high = parse_swing_point(data.get('swing_high'))
         context.swing_low = parse_swing_point(data.get('swing_low'))
         
-        context.trend = data.get('trend')
+        context.trend = data.get('trend', TrendDirectionEnum.UNKNOWN.value)
         context.range_high = data.get('range_high')
         context.range_low = data.get('range_low')
         context.range_equilibrium = data.get('range_equilibrium')
         context.range_size = data.get('range_size')
         context.range_strength = data.get('range_strength')
+        context.range_detected_at = data.get('range_detected_at')  # Keep as string
+        context.is_in_range = data.get('is_in_range', False)
+        context.fib_levels = data.get('fib_levels', {"support": [], "resistance": []})
         
-        # Parse range_detected_at as datetime
-        context.range_detected_at = parse_datetime(data.get('range_detected_at'))
-        
-        context.is_in_range = data.get('is_in_range')
-        context.fib_levels = data.get('fib_levels')
-        context.timeframe_category = data.get('timeframe_category')
+        # Handle timeframe_category
+        timeframe_category = data.get('timeframe_category')
+        if timeframe_category:
+            try:
+                context.timeframe_category = TimeframeCategoryEnum(timeframe_category)
+            except ValueError:
+                # Fallback to computing it
+                context.timeframe_category = get_timeframe_category(context.timeframe)
         
         return context
     

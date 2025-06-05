@@ -27,7 +27,8 @@ class ContextEngine:
         self, 
         cache_service: CacheService,
         database: Database,
-        config: Dict[str, Any]
+        config: Dict[str, Any],
+        is_backtest: bool = False
     ):
         """
         Initialize the context engine.
@@ -45,6 +46,7 @@ class ContextEngine:
         # Components to be initialized in start()
         self.analyzers: Dict[str, BaseAnalyzer] = {}
         self.main_loop = None
+        self.is_backtest = is_backtest
     
     async def start(self):
         """Initialize and start the context engine."""
@@ -141,10 +143,11 @@ class ContextEngine:
             self.cache_service.set(cache_key, context.to_dict(), expiry=CacheTTL.MARKET_STATE)
         elif updated_flag:
             self.cache_service.set(cache_key, context.to_dict(), expiry=CacheTTL.MARKET_STATE)
-            try:
-                await self._store_context_history(original_context)
-            except Exception as e:
-                logger.error(f"Error storing historical context: {e}")
+            if not self.is_backtest:
+                try:
+                    await self._store_context_history(original_context)
+                except Exception as e:
+                    logger.error(f"Error storing historical context: {e}")
 
         return context
     
