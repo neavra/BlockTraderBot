@@ -15,6 +15,7 @@ from time_manager import TimeManager
 from strategy.domain.models.market_context import MarketContext
 from shared.domain.dto.signal_dto import SignalDto
 from shared.domain.types.source_type_enum import SourceTypeEnum
+from shared.constants import CacheKeys
 
 
 logger = logging.getLogger(__name__)
@@ -141,6 +142,7 @@ class BackTestingEngine:
             return
         
         self.logger.info("Stopping BackTesting Engine...")
+        await self._cleanup_cache()
         self.running = False
         
         # Stop all components
@@ -366,7 +368,7 @@ class BackTestingEngine:
             self.logger.info(f"Processing {len(candles)} candles...")
             
             window_size = 50  # Number of candles to include in each window
-            
+            all_signals = []
             # Process candles with sliding window approach
             for i in range(len(candles)):
                 # Create sliding window: start from max(0, i-window_size+1) to i+1
@@ -378,7 +380,6 @@ class BackTestingEngine:
                 self.time_manager.set_current_time(current_candle.timestamp)
                                 
                 # b. Execute strategies
-                signals = []
                 await self.strategy_service.strategy_runner.context_engine.update_context(symbol, timeframe, candle_data, exchange)
 
                 market_contexts: List[MarketContext] = await self.strategy_service.strategy_runner.context_engine.get_multi_timeframe_contexts(symbol, timeframe, exchange)
@@ -386,11 +387,11 @@ class BackTestingEngine:
                     logger.info(f"Incomplete MTF context for {symbol} {timeframe}. Skipping strategy execution.")
                     continue
 
-                result : List[SignalDto] = await self.strategy_service.strategy_runner.execute_strategies(candle_data, market_contexts, SourceTypeEnum.HISTORICAL)
-                if not result:
+                signals : List[SignalDto] = await self.strategy_service.strategy_runner.execute_strategies(candle_data, market_contexts, SourceTypeEnum.HISTORICAL)
+                if not signals:
                     logger.info("NO signals generated")
                     continue
-                signals.extend(result)
+                all_signals.extend(signals)
 
                 # c. Process signals through execution layer
                 orders = []  # TODO: ExecutionService.process_signals(signals)
@@ -423,14 +424,40 @@ class BackTestingEngine:
             self.logger.info("-" * 80)
             self.logger.info("PERFORMANCE METRICS:")
             self.logger.info(f"  Candles Processed:   {len(candles):,}")
-            self.logger.info(f"  Signals Generated:   {len(signals)}")
+            self.logger.info(f"  Signals Generated:   {len(all_signals)}")
             self.logger.info(f"  Avg Time/Candle:     {(processing_duration/len(candles))*1000:.2f} ms")
             self.logger.info(f"  Processing Rate:     {len(candles)/processing_duration:.1f} candles/second")
             # # TODO: results = BackTestingMonitoringService.generate_final_report()
             results = {}  # Placeholder
-            self.logger.info(f"Backtest execution completed successfully, signals generated: {signals}")
+            await self._cleanup_cache()
             return results
             
         except Exception as e:
             self.logger.error(f"Error during backtest execution: {e}", exc_info=True)
             raise
+
+    async def _cleanup_cache(self):
+        """Clean up all cache keys created during the backtest."""
+        if not self.cache_service:
+            return
+            
+        self.logger.info("Cleaning up backtest cache data...")
+        
+        try:
+            # Method 1: Clean up specific known patterns
+            symbol = self.backtest_config.symbol
+            exchange = self.backtest_config.exchange
+            timeframe = self.backtest_config.timeframe
+            
+            # Clean up market context cache
+            market_context_key = CacheKeys.MARKET_STATE.format(
+                exchange=exchange,
+                symbol=symbol,
+                timeframe=timeframe
+            )
+            deleted = self.cache_service.delete(market_context_key)
+            if deleted:
+                self.logger.info(f"Deleted market context cache: {market_context_key}")
+        except Exception as e:
+            self.logger.error(f"Error during cache cleanup: {e}", exc_info=True)
+    

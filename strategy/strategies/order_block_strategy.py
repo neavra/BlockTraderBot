@@ -31,12 +31,13 @@ class OrderBlockStrategy(Strategy):
         """
         default_params = {
             'risk_reward_ratio': 2.0,
-            'strength_threshold': 0.7,
+            'strength_threshold': 0.3,
             'max_signals_per_day': 3,
             'stop_loss_pct': 0.02,
             'entry_buffer_pct': 0.005,
             'max_position_size': 10,
             'account_size': 1000,
+            'risk_percentage_per_trade': 0.01
         }
         
         if params:
@@ -51,7 +52,7 @@ class OrderBlockStrategy(Strategy):
             if indicator_name not in indicators:
                 raise ValueError(f"Missing required indicator: {indicator_name}")
         
-        self.order_block_repository = indicators.get(IndicatorType.ORDER_BLOCK).repository
+        self.order_block_repository: OrderBlockRepository = indicators.get(IndicatorType.ORDER_BLOCK).repository
         if not self.order_block_repository:
             raise ValueError(f"Unable to get repository from Order Block Indicator")
         
@@ -68,7 +69,7 @@ class OrderBlockStrategy(Strategy):
             List of SignalDto objects
         """
         signals = []
-        
+
         # Get order block results
         order_block_results: OrderBlockResultDto = data.get('order_block', {})
         if not order_block_results:
@@ -80,13 +81,17 @@ class OrderBlockStrategy(Strategy):
         market_contexts: List[MarketContext] = data.get('market_contexts', [])
         
         if not market_contexts:
+            logger.error(f"Orderblock Strategy, no market contexts in data: {data}")
             return []
         
         # Get current price
         current_price = data.get('current_price')
         if not current_price:
+            logger.error(f"Orderblock Strategy, no current price in data: {data}")
             return []
         
+        all_order_blocks = demand_blocks + supply_blocks
+
         # Process demand (bullish) order blocks
         for block in demand_blocks:
             # Skip if not active or status is not 'active'
@@ -94,7 +99,7 @@ class OrderBlockStrategy(Strategy):
                 continue
             
             # Calculate strength score
-            results: StrengthDto = await self.calculate_strength(block, market_contexts, demand_blocks + supply_blocks)
+            results: StrengthDto = await self.calculate_strength(block, market_contexts, all_order_blocks)
             block.strength = results.overall_score
             swing_score = results.swing_proximity
             fib_score = results.fib_confluence
@@ -113,9 +118,9 @@ class OrderBlockStrategy(Strategy):
             
             # Calculate position size based on risk management
             position_size = self._calculate_position_size(
-                current_price, stop_loss, self.params['risk_per_trade']
+                current_price, stop_loss, self.params['risk_percentage_per_trade']
             )
-            
+
             # Create signal
             signal = SignalDto(
                 strategy_name=self.name,
@@ -151,7 +156,7 @@ class OrderBlockStrategy(Strategy):
             if block.status != 'active':
                 continue
             
-            results: StrengthDto = await self.calculate_strength(block, market_contexts, demand_blocks + supply_blocks)
+            results: StrengthDto = await self.calculate_strength(block, market_contexts, all_order_blocks)
             block.strength = results.overall_score
             swing_score = results.swing_proximity
             fib_score = results.fib_confluence
@@ -168,7 +173,7 @@ class OrderBlockStrategy(Strategy):
             take_profit = current_price - (risk * self.params['risk_reward_ratio'])
 
             position_size = self._calculate_position_size(
-                current_price, stop_loss, self.params['risk_per_trade']
+                current_price, stop_loss, self.params['risk_percentage_per_trade']
             )
 
             signal = SignalDto(
@@ -300,7 +305,7 @@ class OrderBlockStrategy(Strategy):
         # Calculate individual scores
         swing_score = self.calculate_swing_proximity(order_block, market_contexts)
         fib_score = self.calculate_fib_confluence(order_block, market_contexts)
-        mtf_score = await self.calculate_mtf_confluence(order_block, all_order_blocks)
+        mtf_score = self.calculate_mtf_confluence(order_block, all_order_blocks)
         
         # Weighted sum for overall strength
         overall_score = (
@@ -336,8 +341,8 @@ class OrderBlockStrategy(Strategy):
         """
         # If no market contexts are available, return 0
         if not market_contexts:
+            logger.error("OrderBlockStrategy calculate swing proximity missing market context")
             return 0.0
-        
         # Extract order block price range and timeframe
         ob_high = order_block.price_high
         ob_low = order_block.price_low
@@ -363,6 +368,7 @@ class OrderBlockStrategy(Strategy):
             
             # Skip if swing points aren't valid
             if swing_high is None or swing_low is None:
+                logger.error("OrderBlockStrategy calculate swing proximity missing SH/SL")
                 continue
             
             # Step 1: Calculate proximity score based on block type
@@ -438,6 +444,7 @@ class OrderBlockStrategy(Strategy):
         """
         # If no market contexts are available, return 0
         if not market_contexts:
+            logger.error("OrderBlockStrategy calculate fib confluence missing market context")
             return 0.0
         
         # Extract order block price range and timeframe
@@ -469,6 +476,7 @@ class OrderBlockStrategy(Strategy):
             
             # Skip if no relevant Fibonacci levels
             if not fib_levels:
+                logger.error("OrderBlockStrategy calculate fib confluence missing fib levels")
                 continue
             
             # Check if the order block overlaps with any Fibonacci level
@@ -554,7 +562,7 @@ class OrderBlockStrategy(Strategy):
         
         return final_score
     
-    async def calculate_mtf_confluence(self, order_block: OrderBlockDto, local_order_blocks: List[OrderBlockDto]):
+    def calculate_mtf_confluence(self, order_block: OrderBlockDto, local_order_blocks: List[OrderBlockDto]):
         """
         Calculate multi-timeframe confluence score for an order block by finding
         overlapping order blocks from higher timeframes in the database.
@@ -592,7 +600,7 @@ class OrderBlockStrategy(Strategy):
             max_price = max(all_highs) * 1.1
             
             # Query repository for active order blocks in higher timeframes within price range
-            mtf_order_blocks = await self.order_block_repository.find_active_indicators_in_price_range(
+            mtf_order_blocks = self.order_block_repository.find_active_indicators_in_price_range(
                 exchange=ob_exchange,
                 symbol=ob_symbol,
                 min_price=min_price,

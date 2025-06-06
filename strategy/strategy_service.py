@@ -119,7 +119,8 @@ class StrategyService:
             self.context_engine = ContextEngine(
                 cache_service=self.cache_service,
                 database=self.database,
-                config=market_context_params
+                config=market_context_params,
+                is_backtest=self.is_backtest
             )
 
             await self.context_engine.start()
@@ -207,7 +208,8 @@ class StrategyService:
                 context_engine=self.context_engine,
                 database=self.database,
                 signal_repository= self.signal_repository,
-                config=self.config.get('strategy', {})
+                config=self.config.get('strategy', {}),
+                is_backtest=self.is_backtest
             )
             
             # Start the runner

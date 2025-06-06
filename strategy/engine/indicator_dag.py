@@ -111,8 +111,14 @@ class IndicatorDAG:
                 results[indicator_name.value] = {"error": str(e)}
                 data[f"{indicator_name.value}_data"] = {"error": str(e)}
 
+        first_candle = candle_data[0]
+        last_candle = candle_data[-1]
         results["market_contexts"] = market_contexts
-        results["current_price"] = candle_data[-1].close
+        results["current_price"] = last_candle.close
+        results["symbol"] = first_candle.symbol
+        results["timeframe"] = first_candle.timeframe
+        results["exchange"] = first_candle.exchange
+        results["current_price"] = last_candle.close
         return results
 
     def build_data_dictionary(

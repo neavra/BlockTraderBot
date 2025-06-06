@@ -41,7 +41,8 @@ class StrategyRunner:
         context_engine: ContextEngine,
         database: Database,
         signal_repository: SignalRepository,
-        config: Dict[str, Any]
+        config: Dict[str, Any],
+        is_backtest: bool = False
     ):
         """
         Initialize the strategy runner
@@ -66,6 +67,7 @@ class StrategyRunner:
         self.consumer_queue = consumer_queue
         self.config = config
         self.running = False
+        self.is_backtest = is_backtest
         self.execution_task = None
         self.main_loop = None  # Will store the event loop for callbacks
         
@@ -318,43 +320,39 @@ class StrategyRunner:
                 market_contexts, 
                 requested_indicators=list(required_indicators)
             )
-            
+            all_signals: List[SignalDto] = []
             # Execute each applicable strategy
             for strategy in self.strategies:
-                try:
-                    # Get strategy requirements
-                    # requirements = strategy.get_requirements()
-                    # timeframes = requirements.get('timeframes', [])
+                # Get strategy requirements
+                # requirements = strategy.get_requirements()
+                # timeframes = requirements.get('timeframes', [])
+                
+                # # Skip if this timeframe is not supported by the strategy
+                # if timeframes and candle_data.get('timeframe') not in timeframes:
+                #     continue
                     
-                    # # Skip if this timeframe is not supported by the strategy
-                    # if timeframes and candle_data.get('timeframe') not in timeframes:
-                    #     continue
-                        
-                    # Execute the strategy with enhanced data
-                    signals = await strategy.analyze(indicator_results)
-                    
-                    # If a signal was generated, publish it and save to database
-                    if signals:
-                        # Publish signal to message queue
-                        if source == SourceTypeEnum.LIVE:
-                            for signal in signals:
-                                # Publish each signal to message queue
-                                await self._publish_signal(signal)
-                        else:
-                            logger.info(f"Skip signal generation, currently handling historical data, source = {source}")
-                        # Prepare signals for database operations
-                        signal_dict = [signal.to_dict() for signal in signals]
-                        # Save signal to database
+                # Execute the strategy with enhanced data
+                signals = await strategy.analyze(indicator_results)
+                
+                # If a signal was generated, publish it and save to database
+                if signals:
+                    all_signals.extend(signals)
+                    # Publish signal to message queue
+                    if source == SourceTypeEnum.LIVE:
+                        for signal in signals:
+                            # Publish each signal to message queue
+                            await self._publish_signal(signal)
+                    else:
+                        logger.info(f"Skip signal generation, currently handling historical data, source = {source}")
+                    # Prepare signals for database operations
+                    signal_dict = [signal.to_dict() for signal in signals]
+                    # Save signal to database
+                    if not self.is_backtest:
                         saved_signal = await self.signal_repository.bulk_create_signals(signal_dict)
-                        
+                    
                         if saved_signal:
-                            logger.info(f"Saved signal to database: ID {saved_signal.get('id')}")
-                        else:
-                            logger.warning(f"Failed to save signal to database")    
-
-                        return signals
-                except Exception as e:
-                    logger.error(f"Error executing strategy {strategy.name}: {e}", exc_info=True)
+                            logger.info(f"Saved signal to database: ID {saved_signal.get('id')}") 
+            return all_signals
         
         except Exception as e:
             logger.error(f"Error in strategy execution: {e}", exc_info=True)
